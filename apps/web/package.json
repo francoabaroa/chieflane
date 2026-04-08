@@ -1,0 +1,47 @@
+{
+  "name": "@chieflane/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "seed": "tsx src/lib/db/seed.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chieflane/shared": "workspace:*",
+    "@chieflane/surface-catalog": "workspace:*",
+    "@chieflane/surface-renderer-web": "workspace:*",
+    "@chieflane/surface-schema": "workspace:*",
+    "@json-render/react": "^0.11.0",
+    "better-sqlite3": "^11.0.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.400.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "uuid": "^10.0.0",
+    "web-push": "^3.6.7",
+    "zod": "^4.1.12",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9.24.0",
+    "eslint-config-next": "^15.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@chieflane/surface-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/catalog.ts",
+  "types": "./src/catalog.ts",
+  "dependencies": {
+    "@json-render/core": "^0.11.0",
+    "@json-render/react": "^0.11.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

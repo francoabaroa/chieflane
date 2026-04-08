@@ -1,0 +1,18 @@
+{
+  "name": "@chieflane/surface-renderer-web",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "dependencies": {
+    "@chieflane/shared": "workspace:*",
+    "@chieflane/surface-catalog": "workspace:*",
+    "@json-render/react": "^0.11.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

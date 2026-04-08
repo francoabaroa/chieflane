@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────
+   Design Tokens
+   Chieflane — Refined Industrial
+   ────────────────────────────────────────────── */
+
+@theme {
+  /* ── Surfaces ── */
+  --color-base: var(--cl-base);
+  --color-surface: var(--cl-surface);
+  --color-surface-hover: var(--cl-surface-hover);
+  --color-elevated: var(--cl-elevated);
+
+  /* ── Borders ── */
+  --color-border: var(--cl-border);
+  --color-border-subtle: var(--cl-border-subtle);
+
+  /* ── Accent — warm vermillion ── */
+  --color-accent: oklch(0.62 0.19 28);
+  --color-accent-hover: oklch(0.68 0.21 28);
+  --color-accent-muted: var(--cl-accent-muted);
+
+  /* ── Text ── */
+  --color-text-primary: var(--cl-text-primary);
+  --color-text-secondary: var(--cl-text-secondary);
+  --color-text-tertiary: var(--cl-text-tertiary);
+
+  /* ── Semantic ── */
+  --color-success: oklch(0.64 0.14 155);
+  --color-success-muted: var(--cl-success-muted);
+  --color-warning: oklch(0.72 0.15 75);
+  --color-warning-muted: var(--cl-warning-muted);
+  --color-critical: oklch(0.60 0.18 20);
+  --color-critical-muted: var(--cl-critical-muted);
+  --color-info: oklch(0.62 0.12 250);
+  --color-info-muted: var(--cl-info-muted);
+
+  /* ── Easing ── */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0);
+}
+
+/* ── Light theme (default) ── */
+html, html.light {
+  color-scheme: light;
+  --cl-base: oklch(0.975 0.007 70);
+  --cl-surface: oklch(0.945 0.005 70);
+  --cl-surface-hover: oklch(0.915 0.005 70);
+  --cl-elevated: oklch(0.99 0.003 70);
+  --cl-border: oklch(0.875 0.008 70);
+  --cl-border-subtle: oklch(0.92 0.005 70);
+  --cl-accent-muted: oklch(0.62 0.19 28 / 0.08);
+  --cl-text-primary: oklch(0.20 0.015 260);
+  --cl-text-secondary: oklch(0.45 0.02 260);
+  --cl-text-tertiary: oklch(0.58 0.015 260);
+  --cl-success-muted: oklch(0.64 0.14 155 / 0.10);
+  --cl-warning-muted: oklch(0.72 0.15 75 / 0.10);
+  --cl-critical-muted: oklch(0.60 0.18 20 / 0.10);
+  --cl-info-muted: oklch(0.62 0.12 250 / 0.10);
+}
+
+/* ── Dark theme ── */
+html.dark {
+  color-scheme: dark;
+  --cl-base: oklch(0.145 0.015 260);
+  --cl-surface: oklch(0.18 0.012 260);
+  --cl-surface-hover: oklch(0.22 0.010 260);
+  --cl-elevated: oklch(0.24 0.010 260);
+  --cl-border: oklch(0.30 0.010 260);
+  --cl-border-subtle: oklch(0.22 0.008 260);
+  --cl-accent-muted: oklch(0.62 0.19 28 / 0.12);
+  --cl-text-primary: oklch(0.93 0.008 70);
+  --cl-text-secondary: oklch(0.65 0.015 260);
+  --cl-text-tertiary: oklch(0.52 0.012 260);
+  --cl-success-muted: oklch(0.64 0.14 155 / 0.12);
+  --cl-warning-muted: oklch(0.72 0.15 75 / 0.12);
+  --cl-critical-muted: oklch(0.60 0.18 20 / 0.12);
+  --cl-info-muted: oklch(0.62 0.12 250 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light) {
+    color-scheme: dark;
+    --cl-base: oklch(0.145 0.015 260);
+    --cl-surface: oklch(0.18 0.012 260);
+    --cl-surface-hover: oklch(0.22 0.010 260);
+    --cl-elevated: oklch(0.24 0.010 260);
+    --cl-border: oklch(0.30 0.010 260);
+    --cl-border-subtle: oklch(0.22 0.008 260);
+    --cl-accent-muted: oklch(0.62 0.19 28 / 0.12);
+    --cl-text-primary: oklch(0.93 0.008 70);
+    --cl-text-secondary: oklch(0.65 0.015 260);
+    --cl-text-tertiary: oklch(0.52 0.012 260);
+    --cl-success-muted: oklch(0.64 0.14 155 / 0.12);
+    --cl-warning-muted: oklch(0.72 0.15 75 / 0.12);
+    --cl-critical-muted: oklch(0.60 0.18 20 / 0.12);
+    --cl-info-muted: oklch(0.62 0.12 250 / 0.12);
+  }
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: var(--font-body);
+    background-color: var(--color-base);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-kerning: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  body {
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  a,
+  button {
+    touch-action: manipulation;
+    transition: color 150ms var(--ease-out-quart), background-color 150ms var(--ease-out-quart), border-color 150ms var(--ease-out-quart), opacity 150ms var(--ease-out-quart);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .animate-fade-in {
+    animation: fade-in 400ms var(--ease-out-expo) both;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 400ms var(--ease-out-expo) both;
+  }
+
+  .stagger-item {
+    animation: slide-up 400ms var(--ease-out-expo) both;
+    animation-delay: calc(var(--stagger-index, 0) * 60ms);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

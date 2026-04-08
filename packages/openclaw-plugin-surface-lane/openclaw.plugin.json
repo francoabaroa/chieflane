@@ -1,0 +1,21 @@
+{
+  "id": "surface-lane",
+  "name": "Surface Lane",
+  "description": "Publishes structured work surfaces to the Chieflane shell. Provides surface_publish, surface_patch, and surface_close tools.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "shellApiUrl": {
+        "type": "string",
+        "description": "URL of the Chieflane shell backend API"
+      },
+      "shellInternalApiKey": {
+        "type": "string",
+        "description": "Bearer token for shell internal API authentication"
+      }
+    },
+    "required": ["shellApiUrl", "shellInternalApiKey"],
+    "additionalProperties": false
+  }
+}
