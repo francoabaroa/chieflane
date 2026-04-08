@@ -17,7 +17,7 @@ Once Codex is running, paste this:
 ```text
 Hi Codex.
 
-Clone <repo-url> into my current directory and read README.md first.
+Clone git@github.com:francoabaroa/chieflane.git into my current directory and read README.md first.
 
 I want Chieflane running locally, connected to a local OpenClaw gateway if possible.
 
@@ -44,7 +44,7 @@ Paste this:
 ```text
 Hi Claude.
 
-Clone <repo-url> into my current directory and read README.md first.
+Clone git@github.com:francoabaroa/chieflane.git into my current directory and read README.md first.
 
 I want Chieflane running locally, connected to a local OpenClaw gateway if possible.
 
@@ -74,7 +74,7 @@ If you want to do it yourself, here is the exact flow.
 ### 1. Clone and install Chieflane
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:francoabaroa/chieflane.git
 cd chieflane
 pnpm install
 cp .env.example .env
