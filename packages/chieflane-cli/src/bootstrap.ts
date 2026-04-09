@@ -1,17 +1,25 @@
 import path from "node:path";
-import dotenv from "dotenv";
 import { execa } from "execa";
 import { upsertCronJobs } from "./cron";
+import {
+  buildShellChildEnv,
+  withTemporaryShellIfNeeded,
+} from "./local-shell";
 import { loadManifest, findRepoRoot } from "./manifest";
 import {
   defaultWorkspacePath,
+  getOpenClawContextKey,
+  getOpenClawProfileLabel,
   enablePlugin,
   getWorkspacePath,
-  installPlugin,
-  restartGateway,
+  isIsolatedOpenClawContext,
+  loadRepoEnv,
+  primeOpenClawInvocationContext,
   resolveWorkspacePath,
   runOpenClaw,
   setConfig,
+  installPlugin,
+  restartGateway,
 } from "./openclaw";
 import { mergeWorkspaceFiles } from "./merge";
 import {
@@ -19,6 +27,11 @@ import {
   type InstallReport,
   writeInstallReport,
 } from "./report";
+import {
+  resolveRuntimeEnv,
+  summarizeRuntimeEnv,
+  type ResolvedRuntimeEnv,
+} from "./runtime-env";
 import { installSkillsIntoWorkspace } from "./skills";
 import { writeLastBootstrapState } from "./state";
 import { runVerifyInternal } from "./verify";
@@ -30,6 +43,8 @@ export type BootstrapOptions = {
   heartbeat: "skip" | "manage" | "force";
   pluginSource: "path" | "npm" | "clawhub" | "link";
   dryRun?: boolean;
+  profile?: string;
+  dev?: boolean;
 };
 
 const VALID_MODES = new Set<BootstrapOptions["mode"]>(["live", "demo"]);
@@ -45,14 +60,6 @@ const VALID_PLUGIN_SOURCES = new Set<BootstrapOptions["pluginSource"]>([
   "clawhub",
   "link",
 ]);
-
-function requireEnv(name: string) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required env var: ${name}`);
-  }
-  return value;
-}
 
 function assertValidChoice(
   field: string,
@@ -71,6 +78,9 @@ export function validateBootstrapOptions(options: BootstrapOptions) {
   assertValidChoice("merge", options.merge, VALID_MERGES);
   assertValidChoice("heartbeat", options.heartbeat, VALID_HEARTBEAT);
   assertValidChoice("pluginSource", options.pluginSource, VALID_PLUGIN_SOURCES);
+  if (options.dev && options.profile) {
+    throw new Error("Use either --dev or --profile, not both.");
+  }
 }
 
 export async function syncActiveWorkspace(args: {
@@ -90,114 +100,27 @@ export async function syncActiveWorkspace(args: {
   );
 }
 
-async function runWebScript(script: string, repoRoot: string) {
+async function runWebScript(
+  script: string,
+  repoRoot: string,
+  env?: NodeJS.ProcessEnv
+) {
   await execa("pnpm", ["--filter", "@chieflane/web", script], {
     cwd: repoRoot,
+    env,
     stdio: "inherit",
   });
 }
 
 async function runPluginBuild(repoRoot: string) {
-  await execa("pnpm", ["--filter", "@chieflane/openclaw-plugin-surface-lane", "build"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
-}
-
-export function getShellHealthUrl(shellApiUrl: string) {
-  return new URL("api/health", ensureTrailingSlash(shellApiUrl)).toString();
-}
-
-function ensureTrailingSlash(value: string) {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
-function isLocalShellUrl(value: string) {
-  try {
-    const parsed = new URL(value);
-    return (
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1" ||
-      parsed.hostname === "0.0.0.0"
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function isShellHealthy(shellApiUrl: string) {
-  try {
-    const response = await fetch(getShellHealthUrl(shellApiUrl));
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function waitForShell(shellApiUrl: string, timeoutMs: number) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await isShellHealthy(shellApiUrl)) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-  }
-  throw new Error(`Timed out waiting for shell health at ${getShellHealthUrl(shellApiUrl)}`);
-}
-
-function getShellDevPort(shellApiUrl: string) {
-  const parsed = new URL(shellApiUrl);
-  if (parsed.port) {
-    return Number(parsed.port);
-  }
-  return 3000;
-}
-
-async function withTemporaryShell<T>(args: {
-  repoRoot: string;
-  shellApiUrl: string;
-  run: () => Promise<T>;
-}) {
-  if (await isShellHealthy(args.shellApiUrl)) {
-    return args.run();
-  }
-
-  if (!isLocalShellUrl(args.shellApiUrl)) {
-    throw new Error(
-      `Shell is not reachable at ${args.shellApiUrl} and bootstrap cannot auto-start a non-local shell server.`
-    );
-  }
-
-  let output = "";
-  const child = execa(
+  await execa(
     "pnpm",
-    ["--filter", "@chieflane/web", "exec", "next", "dev", "--port", String(getShellDevPort(args.shellApiUrl))],
+    ["--filter", "@chieflane/openclaw-plugin-surface-lane", "build"],
     {
-      cwd: args.repoRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-      reject: false,
+      cwd: repoRoot,
+      stdio: "inherit",
     }
   );
-
-  child.stdout?.on("data", (chunk: string | Uint8Array) => {
-    output += chunk.toString();
-  });
-  child.stderr?.on("data", (chunk: string | Uint8Array) => {
-    output += chunk.toString();
-  });
-
-  try {
-    await waitForShell(args.shellApiUrl, 60_000);
-    return await args.run();
-  } catch (error) {
-    const details = output.trim();
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(details ? `${message}\n\nTemporary shell output:\n${details}` : message);
-  } finally {
-    child.kill("SIGINT");
-    await child.catch(() => undefined);
-  }
 }
 
 function pluginInstallArgs(
@@ -218,6 +141,36 @@ function pluginInstallArgs(
   }
 }
 
+function printScopeSummary(report: InstallReport) {
+  console.log(`
+Chieflane will make gateway-profile changes in OpenClaw profile "${report.openclawProfile ?? "default"}":
+- enable /v1/responses
+- install + enable surface-lane
+- write plugin config
+- restart the gateway
+
+Workspace changes will target:
+- ${report.workspace}
+`.trim());
+}
+
+function addGatewayScopedChanges(report: InstallReport) {
+  report.gatewayScopedChanges.push(
+    {
+      kind: "config",
+      label: "Set gateway.http.endpoints.responses.enabled=true",
+    },
+    {
+      kind: "plugin",
+      label: "Install and enable surface-lane",
+    },
+    {
+      kind: "gateway-restart",
+      label: "Restart gateway to activate plugin/config changes",
+    }
+  );
+}
+
 export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
   const options: BootstrapOptions = {
     mode: rawOptions.mode ?? "live",
@@ -226,12 +179,17 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
     heartbeat: rawOptions.heartbeat ?? "skip",
     pluginSource: rawOptions.pluginSource ?? "path",
     dryRun: rawOptions.dryRun === true,
+    profile: rawOptions.profile,
+    dev: rawOptions.dev === true,
   };
   validateBootstrapOptions(options);
 
   const repoRoot = findRepoRoot();
-  dotenv.config({ path: path.join(repoRoot, ".env") });
-
+  const context = primeOpenClawInvocationContext({
+    repoRoot,
+    profile: options.profile,
+    dev: options.dev === true,
+  });
   const manifest = await loadManifest(repoRoot);
   const workspace = await (async () => {
     if (options.workspace !== "auto") {
@@ -251,14 +209,29 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
     workspace,
     mode: options.mode,
   });
-  let shellApiUrl: string | null = null;
+  report.openclawProfile = getOpenClawProfileLabel(context);
+  addGatewayScopedChanges(report);
+  printScopeSummary(report);
+
+  let runtimeEnv: ResolvedRuntimeEnv | null = null;
 
   try {
     if (!options.dryRun) {
-      shellApiUrl = requireEnv("SHELL_API_URL");
-      requireEnv("SHELL_INTERNAL_API_KEY");
-      requireEnv("OPENCLAW_GATEWAY_URL");
-      requireEnv("OPENCLAW_GATEWAY_TOKEN");
+      runtimeEnv = await resolveRuntimeEnv({
+        repoRoot,
+        allowGenerateGatewayToken: isIsolatedOpenClawContext(context),
+        allowGenerateShellInternalApiKey: true,
+        persistGeneratedValues: true,
+        profile: context.profile,
+        dev: context.dev,
+      });
+      report.runtimeEnv = summarizeRuntimeEnv(runtimeEnv);
+      for (const warning of runtimeEnv.warnings) {
+        report.warnings.push({
+          kind: "runtime-env",
+          message: warning,
+        });
+      }
 
       await runOpenClaw(["status"]);
       await runOpenClaw(["gateway", "status"]);
@@ -276,8 +249,11 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
       )) {
         const value =
           configEntry.fromEnv != null
-            ? requireEnv(configEntry.fromEnv)
-            : configEntry.value!;
+            ? buildShellChildEnv(runtimeEnv)[configEntry.fromEnv]
+            : configEntry.value;
+        if (value == null) {
+          throw new Error(`Missing config value for ${configEntry.path}`);
+        }
         await setConfig(configEntry.path, value, report);
       }
 
@@ -293,8 +269,11 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
       )) {
         const value =
           configEntry.fromEnv != null
-            ? requireEnv(configEntry.fromEnv)
-            : configEntry.value!;
+            ? buildShellChildEnv(runtimeEnv)[configEntry.fromEnv]
+            : configEntry.value;
+        if (value == null) {
+          throw new Error(`Missing config value for ${configEntry.path}`);
+        }
         await setConfig(configEntry.path, value, report);
       }
 
@@ -333,26 +312,39 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
     });
 
     if (!options.dryRun) {
-      await runWebScript("db:init", repoRoot);
+      if (!runtimeEnv) {
+        throw new Error("Runtime environment was not resolved");
+      }
+
+      const resolvedRuntimeEnv = runtimeEnv;
+      const shellEnv = buildShellChildEnv(
+        resolvedRuntimeEnv,
+        loadRepoEnv(repoRoot)
+      );
+      await runWebScript("db:init", repoRoot, shellEnv);
       if (manifest.modes[options.mode].seedDemoData) {
-        await runWebScript("seed", repoRoot);
+        await runWebScript("seed", repoRoot, shellEnv);
       }
       await writeLastBootstrapState(repoRoot, {
         workspace,
         mode: options.mode,
+        openclawProfile: report.openclawProfile,
+        openclawContext: {
+          profile: context.profile,
+          dev: context.dev === true,
+        },
         updatedAt: new Date().toISOString(),
       });
-      if (!shellApiUrl) {
-        throw new Error("Missing SHELL_API_URL");
-      }
-      await withTemporaryShell({
+      await withTemporaryShellIfNeeded({
         repoRoot,
-        shellApiUrl,
+        runtimeEnv: resolvedRuntimeEnv,
+        openclawProfile: getOpenClawContextKey(context),
         run: async () => {
           await runVerifyInternal({
             full: true,
             report,
             workspace,
+            runtimeEnv: resolvedRuntimeEnv,
           });
         },
       });
@@ -362,7 +354,7 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
     return report;
   } catch (error) {
     report.errors.push({
-      kind: "bootstrap",
+      kind: runtimeEnv == null ? "runtime-env" : "bootstrap",
       error: error instanceof Error ? error.message : String(error),
     });
     if (!options.dryRun) {

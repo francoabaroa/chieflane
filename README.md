@@ -1,95 +1,46 @@
 # Chieflane
 
-Chieflane is a manifest-driven shell integration pack for OpenClaw. The repo now bootstraps itself into the active OpenClaw workspace instead of asking you to copy skills and workspace files by hand.
+Chieflane is a manifest-driven shell integration pack for OpenClaw. It installs the `surface-lane` plugin, provisions the Chieflane skill pack into the active workspace, merges the workspace snippets, verifies the integration end to end, and runs the local shell.
 
-The intended install UX is:
-
-```bash
-pnpm bootstrap --mode live
-pnpm verify --full
-```
-
-For demo screenshots and seeded placeholder surfaces:
+## Fastest Local Install
 
 ```bash
-pnpm bootstrap --mode demo
+pnpm setup-local
 ```
 
-## Use With Codex Or Claude Code
+This command:
 
-If you want a full-permission coding agent to do the local setup for you, give it the canonical bootstrap flow instead of the old manual copy/link steps.
+- installs repo dependencies if needed
+- discovers the active OpenClaw profile and workspace
+- derives or reuses local gateway settings when possible
+- bootstraps Chieflane
+- verifies the integration end to end
+- starts a local shell and prints the final URLs
 
-### Codex prompt
+### Important Scope Note
 
-```text
-Hi Codex.
+Chieflane modifies the active OpenClaw profile, not only the target workspace.
 
-Read README.md first, then set up Chieflane locally in this repo.
+Bootstrap will:
 
-Assume you have full filesystem, terminal, browser, and network access.
+- enable `/v1/responses`
+- install and enable the `surface-lane` plugin
+- write plugin config
+- restart the gateway
 
-Do this:
+A disposable workspace path does not isolate those changes.
 
-1. Detect whether `openclaw` is already installed and whether a local gateway is running.
-2. If OpenClaw is missing, install it using the official docs and stop only if you need credentials or onboarding input from me.
-3. Copy `.env.example` to `.env` if needed and tell me exactly which values still require my input.
-4. Run `pnpm install`.
-5. Run `pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip`.
-6. Run `pnpm verify --full`.
-7. If verification fails, run `pnpm run doctor`, inspect the generated report, fix what you can, and retry.
-8. Verify the shell in a browser and leave me with the local URLs, what is running, and any remaining blockers.
-```
-
-### Claude Code prompt
-
-```text
-Hi Claude.
-
-Read README.md first, then set up Chieflane locally in this repo.
-
-Assume you have full filesystem, terminal, browser, and network access.
-
-Do this:
-
-1. Reuse any existing local OpenClaw install if possible; otherwise install it and complete the minimum onboarding needed for a local gateway.
-2. Create `.env` from `.env.example` if needed and tell me which secrets or credentials still require my input.
-3. Run `pnpm install`.
-4. Run `pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip`.
-5. Run `pnpm verify --full`.
-6. If verification fails, run `pnpm run doctor`, use the report to debug, and keep going until the local setup is either working or clearly blocked on my input.
-7. Check the shell in a browser and report the final local URLs, running commands, and next manual steps.
-```
-
-## Prerequisites
-
-- Node.js 22+
-- `pnpm` 10+
-- An installed `openclaw` CLI with a working gateway
-- Valid values for the shell and gateway env vars in `.env`
-
-Copy the example env file first:
+For isolation, use a dedicated OpenClaw profile:
 
 ```bash
-cp .env.example .env
+pnpm setup-local -- --profile chieflane
+# or
+pnpm setup-local -- --dev
 ```
 
-Required env vars:
+## Manual And Advanced Paths
 
-- `SHELL_API_URL`
-- `SHELL_INTERNAL_API_KEY`
-- `OPENCLAW_GATEWAY_URL`
-- `OPENCLAW_GATEWAY_TOKEN`
-
-Optional:
-
-- `DATABASE_PATH`
-- `SHELL_APP_PASSWORD`
-- `SHELL_APP_SESSION_SECRET`
-- `WEB_PUSH_VAPID_*`
-
-## Flow A: Existing OpenClaw Workspace
-
-Use this for a workspace that already has custom `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, or `MEMORY.md`.
+### Existing Customized Workspace
 
 ```bash
 pnpm install
@@ -97,23 +48,7 @@ pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip
 pnpm verify --full
 ```
 
-What bootstrap does:
-
-- Detects the active OpenClaw workspace from `agents.defaults.workspace`
-- If `--workspace` is explicit, updates `agents.defaults.workspace` to that path before continuing
-- Enables the OpenClaw `/v1/responses` endpoint
-- Installs and enables the `surface-lane` plugin
-- Writes the plugin config from env vars
-- Installs Chieflane skills into `<workspace>/.agents/skills` and preserves existing customized skill folders in `--merge safe`
-- Merges Chieflane blocks into `AGENTS.md` and `TOOLS.md`
-- Leaves user-managed `HEARTBEAT.md` and `MEMORY.md` alone by default
-- Upserts the starter cron jobs
-- Initializes the shell database
-- Writes `.chieflane/install-report.json` and `.chieflane/install-report.md`
-
-## Flow B: Greenfield Workspace
-
-Use this when you want Chieflane to provision the workspace templates too.
+### Greenfield Workspace
 
 ```bash
 pnpm install
@@ -121,16 +56,28 @@ pnpm bootstrap --mode live --workspace ~/.openclaw/workspace --merge force --hea
 pnpm verify --full
 ```
 
-This path creates the greenfield `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, and `MEMORY.md` templates under the target workspace when they are missing, sets that workspace as the active OpenClaw workspace, then configures the OpenClaw integration around it.
-
-## Flow C: Demo Mode
-
-Demo mode follows the live install path and also seeds fictional placeholder surfaces for local smoke testing.
+### Demo Mode
 
 ```bash
 pnpm install
 pnpm bootstrap --mode demo
 ```
+
+`verify --full` auto-starts a temporary local shell only when `SHELL_API_URL` resolves to a local host and the shell is not already running. Remote shells are never auto-started.
+
+## Local Env Behavior
+
+For local token-auth gateways, Chieflane can usually derive:
+
+- `OPENCLAW_GATEWAY_URL`
+- `OPENCLAW_GATEWAY_TOKEN`
+- `SHELL_API_URL`
+- `SHELL_INTERNAL_API_KEY`
+
+Shell overrides are still supported through `.env` and `.env.local`.
+Gateway overrides should be exported in the current shell when you intentionally want to bypass OpenClaw profile discovery.
+
+Chieflane will not silently rotate a gateway token on a shared/default OpenClaw profile. If no plaintext token is discoverable, rerun with `--profile <name>` or `--dev`, or set `OPENCLAW_GATEWAY_TOKEN` explicitly.
 
 ## Verification And Diagnostics
 
@@ -142,11 +89,12 @@ pnpm verify --full
 
 `verify --full` checks:
 
+- runtime env resolution sources
 - `openclaw gateway status`
 - `openclaw doctor`
 - `/v1/responses` enabled
 - `surface-lane` installed and enabled
-- Chieflane skills present in the active workspace
+- Chieflane skills present in `skills/` or `.agents/skills/`
 - shell `GET /api/health`
 - tool roundtrip via `/tools/invoke` for `surface_publish`, `surface_patch`, and `surface_close`
 
@@ -156,21 +104,49 @@ Collect diagnostics without changing anything:
 pnpm run doctor
 ```
 
-The doctor report is written to `<workspace>/.chieflane/doctor-report.json`.
-
-`pnpm doctor` is a pnpm built-in command, so use `pnpm run doctor` or `pnpm diagnose` for the Chieflane diagnostics flow.
-
 Preview bootstrap without writing:
 
 ```bash
 pnpm bootstrap --mode live --dry-run
 ```
 
-## What Bootstrap Never Overwrites By Default
+The install report is written to:
 
-- Existing `MEMORY.md`
-- Existing user-managed `HEARTBEAT.md`
-- Existing workspace instructions outside the managed Chieflane blocks
+```text
+<workspace>/.chieflane/install-report.json
+<workspace>/.chieflane/install-report.md
+```
+
+The doctor report is written to:
+
+```text
+<workspace>/.chieflane/doctor-report.json
+```
+
+## Local Shell Commands
+
+```bash
+pnpm shell:start
+pnpm shell:status
+pnpm shell:stop
+```
+
+`pnpm setup-local` uses the same persistent shell flow and records the state in `.chieflane/runtime/`.
+
+## Prerequisites
+
+- Node.js 22+
+- `pnpm` 10+
+- an installed `openclaw` CLI with a reachable gateway
+
+`.env.example` is now optional-overrides-first. Most local installs should not require manual edits before `pnpm setup-local`.
+
+## What Bootstrap Leaves Alone By Default
+
+- existing `MEMORY.md`
+- existing user-managed `HEARTBEAT.md`
+- existing workspace instructions outside the managed Chieflane blocks
+- existing customized skills when `--merge safe` is used
 
 When bootstrap edits a workspace file, it writes a backup to:
 
@@ -178,23 +154,9 @@ When bootstrap edits a workspace file, it writes a backup to:
 <workspace>/.chieflane/backups/
 ```
 
-## Rollback
-
-To roll back workspace changes, restore the backup files from:
-
-```text
-<workspace>/.chieflane/backups/
-```
-
-You can also inspect the machine-readable report in:
-
-```text
-<workspace>/.chieflane/install-report.json
-```
-
 ## Local Shell-Only Smoke Test
 
-If you want to validate the web shell without an OpenClaw gateway, you can still run the shell directly:
+If you want to validate only the shell without touching OpenClaw:
 
 ```bash
 pnpm install
@@ -208,16 +170,18 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Common Commands
 
 ```bash
+pnpm setup-local
+pnpm bootstrap --mode live
+pnpm verify --full
+pnpm run doctor
+pnpm shell:start
+pnpm shell:status
+pnpm shell:stop
 pnpm dev
 pnpm build
 pnpm lint
 pnpm test
 pnpm typecheck
-pnpm db:init
-pnpm seed:demo
-pnpm bootstrap --mode live
-pnpm verify --full
-pnpm run doctor
 ```
 
 ## Repository Layout
@@ -237,9 +201,9 @@ packages/
 openclaw/
   pack/
     workspace/
-      greenfield/                   # full template files
-      snippets/                     # mergeable managed blocks
+      greenfield/
+      snippets/
     cron/
-      jobs.json                     # desired cron job definitions
-chieflane.integration.json          # machine-readable integration manifest
+      jobs.json
+chieflane.integration.json
 ```

@@ -1,5 +1,6 @@
 import fs from "fs-extra";
 import path from "node:path";
+import type { RuntimeEnvReport } from "./runtime-env";
 import { isSensitiveConfigPath, redactValue } from "./sensitive";
 
 export type ReportItem = Record<string, unknown>;
@@ -7,6 +8,12 @@ export type ReportItem = Record<string, unknown>;
 export type InstallReport = {
   workspace: string;
   mode: "live" | "demo";
+  openclawProfile?: string;
+  gatewayScopedChanges: Array<{
+    kind: "config" | "plugin" | "gateway-restart";
+    label: string;
+  }>;
+  runtimeEnv?: RuntimeEnvReport;
   startedAt: string;
   finishedAt?: string;
   changed: ReportItem[];
@@ -30,6 +37,7 @@ export function createInstallReport(args: {
   return {
     workspace: args.workspace,
     mode: args.mode,
+    gatewayScopedChanges: [],
     startedAt: new Date().toISOString(),
     changed: [],
     skipped: [],
@@ -116,14 +124,49 @@ function installReportMarkdown(report: InstallReport) {
   const checks = report.checks.map(sanitizeReportItem);
   const warnings = report.warnings.map(sanitizeReportItem);
   const errors = report.errors.map(sanitizeReportItem);
+  const gatewayScopedChanges = report.gatewayScopedChanges.map((item) => ({
+    kind: item.kind,
+    label: item.label,
+  }));
+  const runtimeEnv = report.runtimeEnv == null
+    ? []
+    : [
+        {
+          key: "shellApiUrl",
+          source: report.runtimeEnv.shellApiUrl.source,
+          value: report.runtimeEnv.shellApiUrl.value,
+        },
+        {
+          key: "shellInternalApiKey",
+          source: report.runtimeEnv.shellInternalApiKey.source,
+          redacted: report.runtimeEnv.shellInternalApiKey.redacted,
+        },
+        {
+          key: "gatewayUrl",
+          source: report.runtimeEnv.gatewayUrl.source,
+          value: report.runtimeEnv.gatewayUrl.value,
+        },
+        {
+          key: "gatewayToken",
+          source: report.runtimeEnv.gatewayToken.source,
+          redacted: report.runtimeEnv.gatewayToken.redacted,
+        },
+      ];
 
   return [
     "# Chieflane Install Report",
     "",
     `- workspace: ${report.workspace}`,
     `- mode: ${report.mode}`,
+    `- openclawProfile: ${report.openclawProfile ?? "default"}`,
     `- startedAt: ${report.startedAt}`,
     `- finishedAt: ${report.finishedAt ?? ""}`,
+    "",
+    "## Gateway Scope",
+    formatItems(gatewayScopedChanges),
+    "",
+    "## Runtime Env",
+    formatItems(runtimeEnv),
     "",
     "## Changed",
     formatItems(changed),

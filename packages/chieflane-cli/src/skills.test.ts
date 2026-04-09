@@ -5,7 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { findRepoRoot, loadManifest } from "./manifest";
 import { createInstallReport } from "./report";
-import { installSkillsIntoWorkspace } from "./skills";
+import {
+  installSkillsIntoWorkspace,
+  resolveSkillInstallRoot,
+} from "./skills";
 
 const repoRoot = findRepoRoot();
 
@@ -25,7 +28,7 @@ test("installSkillsIntoWorkspace dry-run does not create workspace artifacts", a
     });
 
     assert.equal(
-      await fs.pathExists(path.join(workspace, ".agents", "skills")),
+      await fs.pathExists(path.join(workspace, "skills")),
       false
     );
     assert.ok(
@@ -41,7 +44,7 @@ test("installSkillsIntoWorkspace dry-run does not create workspace artifacts", a
 test("installSkillsIntoWorkspace preserves existing customized skills in safe mode", async () => {
   const manifest = await loadManifest(repoRoot);
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-skills-"));
-  const skillDir = path.join(workspace, ".agents", "skills", "chief-shell");
+  const skillDir = path.join(workspace, "skills", "chief-shell");
 
   try {
     await fs.ensureDir(skillDir);
@@ -75,7 +78,7 @@ test("installSkillsIntoWorkspace preserves existing customized skills in safe mo
 test("installSkillsIntoWorkspace force mode backs up and replaces existing skills", async () => {
   const manifest = await loadManifest(repoRoot);
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-skills-"));
-  const skillDir = path.join(workspace, ".agents", "skills", "chief-shell");
+  const skillDir = path.join(workspace, "skills", "chief-shell");
 
   try {
     await fs.ensureDir(skillDir);
@@ -98,7 +101,7 @@ test("installSkillsIntoWorkspace force mode backs up and replaces existing skill
         (item) =>
           item.kind === "backup" &&
           typeof item.target === "string" &&
-          item.target.includes(".agents/skills/chief-shell")
+          item.target.includes("skills/chief-shell")
       )
     );
     assert.ok(
@@ -109,6 +112,34 @@ test("installSkillsIntoWorkspace force mode backs up and replaces existing skill
           item.action === "replaced"
       )
     );
+  } finally {
+    await fs.remove(workspace);
+  }
+});
+
+test("resolveSkillInstallRoot prefers existing .agents skills for compatibility", async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-skills-"));
+
+  try {
+    await fs.ensureDir(path.join(workspace, ".agents", "skills"));
+    const resolved = resolveSkillInstallRoot(workspace);
+    assert.equal(resolved.root, path.join(workspace, ".agents", "skills"));
+    assert.equal(resolved.kind, "project-agent-skills");
+  } finally {
+    await fs.remove(workspace);
+  }
+});
+
+test("resolveSkillInstallRoot keeps an existing legacy skill target even when workspace skills exists", async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-skills-"));
+
+  try {
+    await fs.ensureDir(path.join(workspace, "skills"));
+    await fs.ensureDir(path.join(workspace, ".agents", "skills", "chief-shell"));
+
+    const resolved = resolveSkillInstallRoot(workspace, "chief-shell");
+    assert.equal(resolved.root, path.join(workspace, ".agents", "skills"));
+    assert.equal(resolved.kind, "project-agent-skills");
   } finally {
     await fs.remove(workspace);
   }

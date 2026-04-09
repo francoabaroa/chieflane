@@ -9,6 +9,10 @@
   "scripts": {
     "bootstrap": "tsx src/index.ts bootstrap",
     "verify": "tsx src/index.ts verify",
+    "setup-local": "tsx src/index.ts setup-local",
+    "shell:start": "tsx src/index.ts shell-start",
+    "shell:stop": "tsx src/index.ts shell-stop",
+    "shell:status": "tsx src/index.ts shell-status",
     "doctor": "tsx src/index.ts doctor",
     "typecheck": "tsc --noEmit"
   },

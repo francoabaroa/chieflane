@@ -13,6 +13,29 @@ test("writeInstallReport redacts sensitive config values", async () => {
       workspace,
       mode: "live",
     });
+    report.openclawProfile = "chieflane";
+    report.gatewayScopedChanges.push({
+      kind: "plugin",
+      label: "Install and enable surface-lane",
+    });
+    report.runtimeEnv = {
+      shellApiUrl: {
+        source: "default",
+        value: "http://localhost:3000",
+      },
+      shellInternalApiKey: {
+        source: "generated",
+        redacted: "[REDACTED]",
+      },
+      gatewayUrl: {
+        source: "config",
+        value: "http://127.0.0.1:18789",
+      },
+      gatewayToken: {
+        source: "config",
+        redacted: "[REDACTED]",
+      },
+    };
     report.changed.push({
       kind: "config",
       path: "plugins.entries.surface-lane.config.shellInternalApiKey",
@@ -33,6 +56,8 @@ test("writeInstallReport redacts sensitive config values", async () => {
 
     assert.equal(json.changed[0]?.value, "[REDACTED]");
     assert.ok(!markdown.includes("super-secret"));
+    assert.ok(markdown.includes("openclawProfile: chieflane"));
+    assert.ok(markdown.includes("gatewayToken"));
   } finally {
     await fs.remove(workspace);
   }

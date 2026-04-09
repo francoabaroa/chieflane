@@ -1,12 +1,17 @@
-import path from "node:path";
-import dotenv from "dotenv";
 import { findRepoRoot, getRequiredEnvNames, loadManifest } from "./manifest";
-import { defaultWorkspacePath, getWorkspacePath, runOpenClaw } from "./openclaw";
+import {
+  defaultWorkspacePath,
+  getOpenClawProfileLabel,
+  getWorkspacePath,
+  primeOpenClawInvocationContext,
+  runOpenClaw,
+} from "./openclaw";
 import {
   createDoctorReport,
   type DoctorReport,
   writeDoctorReport,
 } from "./report";
+import { resolveShellApiUrl } from "./runtime-env";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -33,9 +38,13 @@ async function recordCheck(
   }
 }
 
-export async function runDoctor() {
+export async function runDoctor(options: { profile?: string; dev?: boolean } = {}) {
   const repoRoot = findRepoRoot();
-  dotenv.config({ path: path.join(repoRoot, ".env") });
+  const context = primeOpenClawInvocationContext({
+    repoRoot,
+    profile: options.profile,
+    dev: options.dev === true,
+  });
 
   const manifest = await loadManifest(repoRoot);
   const report = createDoctorReport(defaultWorkspacePath());
@@ -108,17 +117,22 @@ export async function runDoctor() {
     });
 
     await recordCheck(report, "shell-health", async () => {
-      const shellApiUrl = process.env.SHELL_API_URL;
-      if (!shellApiUrl) {
-        throw new Error("Missing SHELL_API_URL");
-      }
-
+      const { shellApiUrl, source } = await resolveShellApiUrl({
+        repoRoot,
+        profile: context.profile,
+        dev: context.dev,
+      });
       const response = await fetch(`${shellApiUrl}/api/health`);
       if (!response.ok) {
         throw new Error(`Shell health failed (${response.status})`);
       }
       const body = (await response.json()) as Record<string, unknown>;
-      return body;
+      return {
+        ...body,
+        shellApiUrl,
+        shellApiUrlSource: source,
+        openclawProfile: getOpenClawProfileLabel(context),
+      };
     });
 
     return report;

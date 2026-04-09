@@ -15,7 +15,11 @@
         "required": ["name", "required"],
         "properties": {
           "name": { "type": "string" },
-          "required": { "type": "boolean" }
+          "required": { "type": "boolean" },
+          "resolution": {
+            "type": "object",
+            "additionalProperties": true
+          }
         },
         "additionalProperties": false
       }
@@ -27,6 +31,7 @@
         "config": { "type": "array" },
         "plugin": { "type": "object" },
         "skills": { "type": "array" },
+        "scopeWarnings": { "type": "array" },
         "workspace": { "type": "object" },
         "cron": { "type": "array" },
         "healthChecks": { "type": "array" }

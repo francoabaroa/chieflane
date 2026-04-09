@@ -6,6 +6,20 @@ import { z } from "zod";
 const envVarSchema = z.object({
   name: z.string().min(1),
   required: z.boolean(),
+  resolution: z
+    .object({
+      kind: z.string().min(1),
+      value: z.union([z.string(), z.boolean(), z.number()]).optional(),
+      persist: z.string().min(1).optional(),
+      sensitive: z.boolean().optional(),
+      fallback: z.string().min(1).optional(),
+      onlyWhenIsolated: z.boolean().optional(),
+      path: z.string().min(1).optional(),
+      paths: z.array(z.string().min(1)).optional(),
+      generator: z.string().min(1).optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 
 const configEntrySchema = z.object({
@@ -26,7 +40,16 @@ const pluginSchema = z.object({
 const skillSchema = z.object({
   slug: z.string().min(1),
   source: z.string().min(1),
-  target: z.string().min(1),
+  target: z.string().min(1).optional(),
+  targets: z.array(z.string().min(1)).optional(),
+  strategy: z.enum(["fixed", "auto-precedence"]).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.target && (!value.targets || value.targets.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Skill entry requires target or targets",
+    });
+  }
 });
 
 const workspaceSnippetSchema = z.object({
@@ -64,6 +87,12 @@ const integrationManifestSchema = z.object({
     config: z.array(configEntrySchema),
     plugin: pluginSchema,
     skills: z.array(skillSchema),
+    scopeWarnings: z.array(z.object({
+      kind: z.string().min(1),
+      path: z.string().min(1).optional(),
+      id: z.string().min(1).optional(),
+      scope: z.string().min(1),
+    })).default([]),
     workspace: z.object({
       greenfieldTemplates: z.record(z.string().min(1)),
       snippets: z.array(workspaceSnippetSchema),

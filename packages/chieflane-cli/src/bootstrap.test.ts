@@ -4,11 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  getShellHealthUrl,
   runBootstrap,
   syncActiveWorkspace,
   validateBootstrapOptions,
 } from "./bootstrap";
+import { getShellHealthUrl } from "./local-shell";
 import { createInstallReport } from "./report";
 
 const REQUIRED_ENV = [
@@ -45,8 +45,13 @@ test("runBootstrap dry-run does not require integration secrets", async () => {
       )
     );
     assert.equal(
-      await fs.pathExists(path.join(workspace, ".agents", "skills")),
+      await fs.pathExists(path.join(workspace, "skills")),
       false
+    );
+    assert.equal(report.openclawProfile, "default");
+    assert.deepEqual(
+      report.gatewayScopedChanges.map((item) => item.kind),
+      ["config", "plugin", "gateway-restart"]
     );
   } finally {
     for (const [name, value] of previous) {
@@ -72,6 +77,23 @@ test("validateBootstrapOptions rejects an invalid mode before side effects", () 
         dryRun: false,
       }),
     /Invalid mode: lvie/
+  );
+});
+
+test("validateBootstrapOptions rejects --dev with --profile", () => {
+  assert.throws(
+    () =>
+      validateBootstrapOptions({
+        mode: "live",
+        workspace: "auto",
+        merge: "safe",
+        heartbeat: "skip",
+        pluginSource: "path",
+        dryRun: false,
+        profile: "chieflane",
+        dev: true,
+      }),
+    /either --dev or --profile/
   );
 });
 

@@ -4,6 +4,11 @@ import path from "node:path";
 export type LastBootstrapState = {
   workspace: string;
   mode: "live" | "demo";
+  openclawProfile?: string;
+  openclawContext?: {
+    profile?: string;
+    dev?: boolean;
+  };
   updatedAt: string;
 };
 

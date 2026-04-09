@@ -1,44 +1,40 @@
 import fs from "node:fs";
-import path from "node:path";
-import dotenv from "dotenv";
 import { findRepoRoot } from "./manifest";
 import {
+  getShellHealthUrl,
+  isLocalShellUrl,
+  withTemporaryShellIfNeeded,
+} from "./local-shell";
+import {
+  getOpenClawContextKey,
+  getOpenClawProfileLabel,
   getConfigValue,
   getWorkspacePath,
+  type OpenClawInvocationContext,
+  primeOpenClawInvocationContext,
   resolveWorkspacePath,
   runOpenClaw,
 } from "./openclaw";
 import { createInstallReport, type InstallReport } from "./report";
+import {
+  resolveRuntimeEnv,
+  summarizeRuntimeEnv,
+  type ResolvedRuntimeEnv,
+} from "./runtime-env";
+import { getWorkspaceSkillCandidates } from "./skills";
 import { readLastBootstrapState } from "./state";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function requireEnv(name: string, env: NodeJS.ProcessEnv) {
-  const value = env[name];
-  if (!value) {
-    throw new Error(`Missing required env var: ${name}`);
-  }
-  return value;
-}
-
-const VERIFY_REQUIRED_ENV_NAMES = [
-  "SHELL_API_URL",
-  "OPENCLAW_GATEWAY_URL",
-  "OPENCLAW_GATEWAY_TOKEN",
-] as const;
-
-export function getMissingVerifyEnvNames(env: NodeJS.ProcessEnv) {
-  return VERIFY_REQUIRED_ENV_NAMES.filter((name) => !env[name]);
-}
-
-export function getWorkspaceSkillPath(workspace: string, slug: string) {
-  return path.join(workspace, ".agents", "skills", slug, "SKILL.md");
-}
-
 export function getMissingWorkspaceSkills(workspace: string, slugs: string[]) {
-  return slugs.filter((slug) => !fs.existsSync(getWorkspaceSkillPath(workspace, slug)));
+  return slugs.filter(
+    (slug) =>
+      !getWorkspaceSkillCandidates(workspace, slug).some((filePath) =>
+        fs.existsSync(filePath)
+      )
+  );
 }
 
 export function getMissingSkillsForVerification(args: {
@@ -55,10 +51,6 @@ export function getMissingSkillsForVerification(args: {
       : args.desired.filter((slug) => !visibleSet.has(slug));
 
   return Array.from(new Set([...workspaceMissing, ...visibleMissing]));
-}
-
-function getShellHealthUrl(shellApiUrl: string) {
-  return new URL("/api/health", shellApiUrl.endsWith("/") ? shellApiUrl : `${shellApiUrl}/`).toString();
 }
 
 async function invokeTool(
@@ -131,39 +123,128 @@ async function runCheck(
 
 export async function resolveVerifyWorkspace(
   repoRoot: string,
-  explicitWorkspace?: string
+  explicitWorkspace?: string,
+  context?: OpenClawInvocationContext,
+  getWorkspacePathFn: typeof getWorkspacePath = getWorkspacePath
 ) {
   if (explicitWorkspace && explicitWorkspace !== "auto") {
     return resolveWorkspacePath(explicitWorkspace);
   }
 
   const lastBootstrap = await readLastBootstrapState(repoRoot);
-  if (lastBootstrap?.workspace) {
+  const expectedProfile = getOpenClawProfileLabel(context);
+  const expectedContextKey = getOpenClawContextKey(context);
+  const cachedContextKey =
+    lastBootstrap?.openclawContext != null
+      ? getOpenClawContextKey(lastBootstrap.openclawContext)
+      : lastBootstrap?.openclawProfile;
+  if (
+    lastBootstrap?.workspace &&
+    typeof cachedContextKey === "string" &&
+    cachedContextKey === expectedContextKey
+  ) {
     return resolveWorkspacePath(lastBootstrap.workspace);
   }
 
-  return getWorkspacePath();
+  if (
+    lastBootstrap?.workspace &&
+    lastBootstrap.openclawProfile == null &&
+    expectedProfile === "default"
+  ) {
+    return resolveWorkspacePath(lastBootstrap.workspace);
+  }
+
+  return getWorkspacePathFn();
 }
 
-export async function runVerify(options: { full?: boolean; workspace?: string }) {
-  const repoRoot = findRepoRoot();
-  dotenv.config({ path: path.join(repoRoot, ".env") });
+export type VerifyOptions = {
+  full?: boolean;
+  workspace?: string;
+  ensureShell?: "auto" | "never";
+  profile?: string;
+  dev?: boolean;
+};
 
-  const workspace = await resolveVerifyWorkspace(repoRoot, options.workspace);
-  const report = createInstallReport({
+type VerifyDependencies = {
+  findRepoRoot: typeof findRepoRoot;
+  resolveVerifyWorkspace: typeof resolveVerifyWorkspace;
+  createInstallReport: typeof createInstallReport;
+  resolveRuntimeEnv: typeof resolveRuntimeEnv;
+  withTemporaryShellIfNeeded: typeof withTemporaryShellIfNeeded;
+  runVerifyInternal: typeof runVerifyInternal;
+  primeOpenClawInvocationContext: typeof primeOpenClawInvocationContext;
+};
+
+const defaultDependencies: VerifyDependencies = {
+  findRepoRoot,
+  resolveVerifyWorkspace,
+  createInstallReport,
+  resolveRuntimeEnv,
+  withTemporaryShellIfNeeded,
+  runVerifyInternal,
+  primeOpenClawInvocationContext,
+};
+
+export async function runVerify(
+  options: VerifyOptions,
+  deps: VerifyDependencies = defaultDependencies
+) {
+  const repoRoot = deps.findRepoRoot();
+  const context = deps.primeOpenClawInvocationContext({
+    repoRoot,
+    profile: options.profile,
+    dev: options.dev === true,
+  });
+  const workspace = await deps.resolveVerifyWorkspace(
+    repoRoot,
+    options.workspace,
+    context
+  );
+  const report = deps.createInstallReport({
     workspace,
     mode: "live",
   });
-  const missing = getMissingVerifyEnvNames(process.env);
-  if (missing.length > 0) {
-    throw new Error(`Missing required env vars: ${missing.join(", ")}`);
+  report.openclawProfile = getOpenClawProfileLabel(context);
+
+  const runtimeEnv = await deps.resolveRuntimeEnv({
+    repoRoot,
+    allowGenerateGatewayToken: false,
+    allowGenerateShellInternalApiKey: false,
+    requireShellInternalApiKey: false,
+    persistGeneratedValues: true,
+    profile: context.profile,
+    dev: context.dev,
+  });
+  report.runtimeEnv = summarizeRuntimeEnv(runtimeEnv);
+  for (const warning of runtimeEnv.warnings) {
+    report.warnings.push({
+      kind: "runtime-env",
+      message: warning,
+    });
   }
 
-  await runVerifyInternal({
-    full: options.full === true,
-    report,
-    workspace,
-  });
+  const runner = async () =>
+    deps.runVerifyInternal({
+      full: options.full === true,
+      report,
+      workspace,
+      runtimeEnv,
+    });
+
+  if (options.ensureShell === "never") {
+    await runner();
+  } else if (!runtimeEnv.shellInternalApiKey) {
+    await runner();
+  } else if (!isLocalShellUrl(runtimeEnv.shellApiUrl)) {
+    await runner();
+  } else {
+    await deps.withTemporaryShellIfNeeded({
+      repoRoot,
+      runtimeEnv,
+      openclawProfile: getOpenClawContextKey(context),
+      run: runner,
+    });
+  }
 
   return report;
 }
@@ -172,12 +253,21 @@ export async function runVerifyInternal(args: {
   full: boolean;
   report: InstallReport;
   workspace: string;
+  runtimeEnv: ResolvedRuntimeEnv;
 }) {
-  const shellApiUrl = requireEnv("SHELL_API_URL", process.env);
-  const gatewayUrl = requireEnv("OPENCLAW_GATEWAY_URL", process.env);
-  const gatewayToken = requireEnv("OPENCLAW_GATEWAY_TOKEN", process.env);
+  const shellApiUrl = args.runtimeEnv.shellApiUrl;
+  const gatewayUrl = args.runtimeEnv.gatewayUrl;
+  const gatewayToken = args.runtimeEnv.gatewayToken;
 
   let hasFailures = false;
+
+  hasFailures =
+    !(await runCheck(args.report, "env-resolution", async () => ({
+      shellApiUrlSource: args.runtimeEnv.sources.shellApiUrl,
+      shellInternalApiKeySource: args.runtimeEnv.sources.shellInternalApiKey,
+      gatewayUrlSource: args.runtimeEnv.sources.gatewayUrl,
+      gatewayTokenSource: args.runtimeEnv.sources.gatewayToken,
+    }))) || hasFailures;
 
   hasFailures =
     !(await runCheck(args.report, "gateway-status", async () => {

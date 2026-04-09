@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { StreamEvent } from "@/lib/types";
 
 export function useStream(onEvent: (event: StreamEvent) => void) {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const handleStreamEvent = useEffectEvent((event: MessageEvent) => {
-    try {
-      onEvent(JSON.parse(event.data) as StreamEvent);
-    } catch {
-      // Ignore malformed event payloads.
-    }
-  });
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let active = true;
+
+    const handleStreamEvent = (event: MessageEvent) => {
+      try {
+        onEventRef.current(JSON.parse(event.data) as StreamEvent);
+      } catch {
+        // Ignore malformed event payloads.
+      }
+    };
 
     const connect = () => {
       if (!active) {
