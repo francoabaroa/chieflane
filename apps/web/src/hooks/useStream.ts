@@ -24,14 +24,9 @@ export function useStream(onEvent: (event: StreamEvent) => void) {
 
       const eventSource = new EventSource("/api/stream");
       eventSourceRef.current = eventSource;
-
-      const handleEvent = (event: MessageEvent) => {
-        handleStreamEvent(event);
-      };
-
-      eventSource.addEventListener("surface.updated", handleEvent);
-      eventSource.addEventListener("surface.closed", handleEvent);
-      eventSource.addEventListener("action.progress", handleEvent);
+      eventSource.addEventListener("surface.updated", handleStreamEvent);
+      eventSource.addEventListener("surface.closed", handleStreamEvent);
+      eventSource.addEventListener("action.progress", handleStreamEvent);
 
       eventSource.onerror = () => {
         eventSource.close();

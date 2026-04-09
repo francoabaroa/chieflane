@@ -2,7 +2,7 @@
   "id": "surface-lane",
   "name": "Surface Lane",
   "description": "Publishes structured work surfaces to the Chieflane shell. Provides surface_publish, surface_patch, and surface_close tools.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "configSchema": {
     "type": "object",
     "properties": {

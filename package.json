@@ -4,16 +4,24 @@
   "scripts": {
     "dev": "pnpm --filter @chieflane/web dev",
     "build": "pnpm --filter @chieflane/web build",
-    "seed": "pnpm --filter @chieflane/web seed",
+    "db:init": "pnpm --filter @chieflane/web db:init",
+    "seed:demo": "pnpm --filter @chieflane/web seed",
+    "seed": "pnpm seed:demo",
+    "bootstrap": "pnpm --filter @chieflane/cli bootstrap",
+    "verify": "pnpm --filter @chieflane/cli verify",
+    "doctor": "pnpm --filter @chieflane/cli exec tsx src/index.ts doctor",
+    "diagnose": "pnpm run doctor",
+    "live": "pnpm --filter @chieflane/cli bootstrap --mode live",
+    "demo": "pnpm --filter @chieflane/cli bootstrap --mode demo",
     "lint": "pnpm --filter @chieflane/web lint",
-    "test": "pnpm --filter @chieflane/web exec tsx --test src/**/*.test.ts ../../packages/surface-schema/src/**/*.test.ts",
-    "typecheck": "pnpm --filter @chieflane/web typecheck"
+    "test": "pnpm --filter @chieflane/web exec tsx --test src/**/*.test.ts ../../packages/surface-schema/src/**/*.test.ts ../../packages/chieflane-cli/src/**/*.test.ts",
+    "typecheck": "pnpm --filter @chieflane/web typecheck && pnpm --filter @chieflane/cli typecheck && pnpm --filter @chieflane/openclaw-plugin-surface-lane exec tsc --noEmit"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "sharp"]
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.19.0+sha512.c9fc7236e92adf5c8af42fd5bf1612df99c2ceb62f27047032f4720b33f8eacdde311865e91c411f2774f618d82f320808ecb51718bfa82c060c4ba7c76a32b8"
 }

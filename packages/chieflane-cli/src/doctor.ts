@@ -1,0 +1,128 @@
+import path from "node:path";
+import dotenv from "dotenv";
+import { findRepoRoot, getRequiredEnvNames, loadManifest } from "./manifest";
+import { defaultWorkspacePath, getWorkspacePath, runOpenClaw } from "./openclaw";
+import {
+  createDoctorReport,
+  type DoctorReport,
+  writeDoctorReport,
+} from "./report";
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function recordCheck(
+  report: DoctorReport,
+  kind: string,
+  fn: () => Promise<Record<string, unknown>>
+) {
+  try {
+    const details = await fn();
+    report.checks.push({
+      kind,
+      ok: true,
+      ...details,
+    });
+  } catch (error) {
+    report.checks.push({
+      kind,
+      ok: false,
+      error: errorMessage(error),
+    });
+  }
+}
+
+export async function runDoctor() {
+  const repoRoot = findRepoRoot();
+  dotenv.config({ path: path.join(repoRoot, ".env") });
+
+  const manifest = await loadManifest(repoRoot);
+  const report = createDoctorReport(defaultWorkspacePath());
+
+  try {
+    await recordCheck(report, "workspace-resolution", async () => {
+      const workspace = await getWorkspacePath();
+      report.workspace = workspace;
+      return { workspace };
+    });
+
+    await recordCheck(report, "env", async () => {
+      const missing = getRequiredEnvNames(manifest).filter((name) => !process.env[name]);
+      if (missing.length > 0) {
+        throw new Error(`Missing required env vars: ${missing.join(", ")}`);
+      }
+      return { missing };
+    });
+
+    await recordCheck(report, "openclaw-status", async () => {
+      const result = await runOpenClaw(["status"], { reject: false });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "openclaw status failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "gateway-status", async () => {
+      const result = await runOpenClaw(["gateway", "status"], { reject: false });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "openclaw gateway status failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "doctor-json", async () => {
+      const result = await runOpenClaw(["doctor", "--json"], { reject: false });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "openclaw doctor --json failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "plugins-doctor", async () => {
+      const result = await runOpenClaw(["plugins", "doctor"], { reject: false });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "openclaw plugins doctor failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "plugin-inspect", async () => {
+      const result = await runOpenClaw(["plugins", "inspect", "surface-lane", "--json"], {
+        reject: false,
+      });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "surface-lane inspect failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "skills-check", async () => {
+      const result = await runOpenClaw(["skills", "check", "--json"], {
+        reject: false,
+      });
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || result.stdout || "openclaw skills check failed");
+      }
+      return { stdout: result.stdout.trim() };
+    });
+
+    await recordCheck(report, "shell-health", async () => {
+      const shellApiUrl = process.env.SHELL_API_URL;
+      if (!shellApiUrl) {
+        throw new Error("Missing SHELL_API_URL");
+      }
+
+      const response = await fetch(`${shellApiUrl}/api/health`);
+      if (!response.ok) {
+        throw new Error(`Shell health failed (${response.status})`);
+      }
+      const body = (await response.json()) as Record<string, unknown>;
+      return body;
+    });
+
+    return report;
+  } finally {
+    await writeDoctorReport(report.workspace, report);
+  }
+}

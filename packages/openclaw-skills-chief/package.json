@@ -1,8 +1,8 @@
 {
   "name": "@chieflane/openclaw-skills-chief",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "private": false,
   "files": [
-    "*.md"
+    "skills/**"
   ]
 }

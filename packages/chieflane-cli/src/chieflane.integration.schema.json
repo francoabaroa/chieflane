@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chieflane.dev/schemas/chieflane.integration.schema.json",
+  "title": "Chieflane Integration Manifest",
+  "type": "object",
+  "required": ["id", "version", "env", "openclaw", "modes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string" },
+    "version": { "type": "string" },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "required"],
+        "properties": {
+          "name": { "type": "string" },
+          "required": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "openclaw": {
+      "type": "object",
+      "required": ["config", "plugin", "skills", "workspace", "cron", "healthChecks"],
+      "properties": {
+        "config": { "type": "array" },
+        "plugin": { "type": "object" },
+        "skills": { "type": "array" },
+        "workspace": { "type": "object" },
+        "cron": { "type": "array" },
+        "healthChecks": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "modes": {
+      "type": "object",
+      "required": ["demo", "live"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,137 @@
+{
+  "$schema": "./packages/chieflane-cli/src/chieflane.integration.schema.json",
+  "id": "chieflane",
+  "version": "0.2.0",
+  "env": [
+    { "name": "SHELL_API_URL", "required": true },
+    { "name": "SHELL_INTERNAL_API_KEY", "required": true },
+    { "name": "OPENCLAW_GATEWAY_URL", "required": true },
+    { "name": "OPENCLAW_GATEWAY_TOKEN", "required": true },
+    { "name": "DATABASE_PATH", "required": false }
+  ],
+  "openclaw": {
+    "config": [
+      {
+        "path": "gateway.http.endpoints.responses.enabled",
+        "value": true
+      },
+      {
+        "path": "plugins.entries.surface-lane.config.shellApiUrl",
+        "fromEnv": "SHELL_API_URL"
+      },
+      {
+        "path": "plugins.entries.surface-lane.config.shellInternalApiKey",
+        "fromEnv": "SHELL_INTERNAL_API_KEY"
+      }
+    ],
+    "plugin": {
+      "id": "surface-lane",
+      "source": {
+        "mode": "local-path",
+        "path": "./packages/openclaw-plugin-surface-lane"
+      }
+    },
+    "skills": [
+      {
+        "slug": "chief-shell",
+        "source": "./packages/openclaw-skills-chief/skills/chief-shell",
+        "target": ".agents/skills/chief-shell"
+      },
+      {
+        "slug": "morning-ops",
+        "source": "./packages/openclaw-skills-chief/skills/morning-ops",
+        "target": ".agents/skills/morning-ops"
+      },
+      {
+        "slug": "meeting-ops",
+        "source": "./packages/openclaw-skills-chief/skills/meeting-ops",
+        "target": ".agents/skills/meeting-ops"
+      },
+      {
+        "slug": "relationship-context",
+        "source": "./packages/openclaw-skills-chief/skills/relationship-context",
+        "target": ".agents/skills/relationship-context"
+      }
+    ],
+    "workspace": {
+      "greenfieldTemplates": {
+        "AGENTS.md": "./openclaw/pack/workspace/greenfield/AGENTS.md",
+        "TOOLS.md": "./openclaw/pack/workspace/greenfield/TOOLS.md",
+        "HEARTBEAT.md": "./openclaw/pack/workspace/greenfield/HEARTBEAT.md",
+        "MEMORY.md": "./openclaw/pack/workspace/greenfield/MEMORY.md"
+      },
+      "snippets": [
+        {
+          "target": "AGENTS.md",
+          "source": "./openclaw/pack/workspace/snippets/AGENTS.chieflane.md",
+          "strategy": "managed-block",
+          "blockId": "chieflane-agents"
+        },
+        {
+          "target": "TOOLS.md",
+          "source": "./openclaw/pack/workspace/snippets/TOOLS.chieflane.md",
+          "strategy": "managed-block",
+          "blockId": "chieflane-tools"
+        },
+        {
+          "target": "HEARTBEAT.md",
+          "source": "./openclaw/pack/workspace/snippets/HEARTBEAT.chieflane.md",
+          "strategy": "managed-heartbeat",
+          "mode": "skip-if-user-managed"
+        }
+      ]
+    },
+    "cron": [
+      {
+        "name": "morning-ops",
+        "cron": "0 9 * * 1-5",
+        "timezone": "America/New_York",
+        "timeoutSeconds": 300,
+        "message": "Execute Morning Ops per AGENTS.md. Update shell surfaces only. Do not deliver chat output unless action is needed."
+      },
+      {
+        "name": "evening-wrap",
+        "cron": "0 18 * * 1-5",
+        "timezone": "America/New_York",
+        "timeoutSeconds": 300,
+        "message": "Execute Evening Wrap per AGENTS.md. Update shell surfaces only. Do not deliver chat output unless action is needed."
+      },
+      {
+        "name": "weekly-agenda",
+        "cron": "0 18 * * 0",
+        "timezone": "America/New_York",
+        "timeoutSeconds": 600,
+        "message": "Execute Weekly Exec Agenda per AGENTS.md and update the weekly agenda surface."
+      },
+      {
+        "name": "kaizen-review",
+        "cron": "0 9 * * 0",
+        "timezone": "America/New_York",
+        "timeoutSeconds": 900,
+        "message": "Execute Weekly Kaizen per AGENTS.md and update the kaizen digest surface."
+      }
+    ],
+    "healthChecks": [
+      { "kind": "gateway-status" },
+      { "kind": "responses-enabled" },
+      { "kind": "plugin-installed", "id": "surface-lane" },
+      { "kind": "plugin-enabled", "id": "surface-lane" },
+      {
+        "kind": "skills-present",
+        "slugs": [
+          "chief-shell",
+          "morning-ops",
+          "meeting-ops",
+          "relationship-context"
+        ]
+      },
+      { "kind": "shell-health" },
+      { "kind": "tool-roundtrip", "tool": "surface_publish" },
+      { "kind": "tool-roundtrip", "tool": "surface_patch" }
+    ]
+  },
+  "modes": {
+    "demo": { "seedDemoData": true },
+    "live": { "seedDemoData": false }
+  }
+}

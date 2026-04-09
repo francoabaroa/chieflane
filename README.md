@@ -1,108 +1,211 @@
-# Hi, this is Chieflane.
+# Chieflane
 
-Chieflane is an operator shell for OpenClaw. It is not a prettier chat window. OpenClaw stays the brain, scheduler, memory layer, and tool/runtime. Chieflane owns the UI state, review surfaces, actions, notifications, and persistent work lanes.
+Chieflane is a manifest-driven shell integration pack for OpenClaw. The repo now bootstraps itself into the active OpenClaw workspace instead of asking you to copy skills and workspace files by hand.
 
-> Warning
->
-> Chieflane is still experimental and should be treated as beta software. Expect rough edges, incomplete workflows, and bugs. Use it at your own peril, especially for anything you cannot easily recover.
+The intended install UX is:
 
-This repo is MIT licensed. The seeded demo data is synthetic placeholder content for local evaluation only.
+```bash
+pnpm bootstrap --mode live
+pnpm verify --full
+```
 
-## Get started with Codex
+For demo screenshots and seeded placeholder surfaces:
 
-The fastest way to get this running is with Codex or another full-permission code agent.
+```bash
+pnpm bootstrap --mode demo
+```
 
-Once Codex is running, paste this:
+## Use With Codex Or Claude Code
+
+If you want a full-permission coding agent to do the local setup for you, give it the canonical bootstrap flow instead of the old manual copy/link steps.
+
+### Codex prompt
 
 ```text
 Hi Codex.
 
-Clone git@github.com:francoabaroa/chieflane.git into my current directory and read README.md first.
+Read README.md first, then set up Chieflane locally in this repo.
 
-I want Chieflane running locally, connected to a local OpenClaw gateway if possible.
-
-Assume you have full filesystem, terminal, and network permissions on this machine.
+Assume you have full filesystem, terminal, browser, and network access.
 
 Do this:
 
-1. Detect whether OpenClaw is already installed locally by checking for the `openclaw` CLI, `~/.openclaw`, and any running local gateway.
-2. If OpenClaw is missing, install it with the official installer and run the onboarding flow for a local gateway.
-3. In this repo, run `pnpm install`, copy `.env.example` to `.env`, generate secure values for `SHELL_INTERNAL_API_KEY` and `SHELL_APP_SESSION_SECRET`, and keep `OPENCLAW_GATEWAY_URL` pointed at my local gateway.
-4. Make sure OpenClaw has the OpenResponses HTTP endpoint enabled.
-5. Link the local plugin from `packages/openclaw-plugin-surface-lane`, copy the Chieflane skill files into the active OpenClaw workspace skill directory, and copy the workspace starter files from `openclaw/workspace/` into the active OpenClaw workspace.
-6. Seed the local Chieflane database, start the Chieflane web app, and verify it loads in a browser.
-7. Tell me exactly when you need my model-provider credentials, push keys, or any other secrets.
-8. Leave me with the local URLs, running commands, and the next manual steps.
+1. Detect whether `openclaw` is already installed and whether a local gateway is running.
+2. If OpenClaw is missing, install it using the official docs and stop only if you need credentials or onboarding input from me.
+3. Copy `.env.example` to `.env` if needed and tell me exactly which values still require my input.
+4. Run `pnpm install`.
+5. Run `pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip`.
+6. Run `pnpm verify --full`.
+7. If verification fails, run `pnpm run doctor`, inspect the generated report, fix what you can, and retry.
+8. Verify the shell in a browser and leave me with the local URLs, what is running, and any remaining blockers.
 ```
 
-## Get started with Claude Code
-
-If you prefer Claude Code, use the same flow.
-
-Paste this:
+### Claude Code prompt
 
 ```text
 Hi Claude.
 
-Clone git@github.com:francoabaroa/chieflane.git into my current directory and read README.md first.
+Read README.md first, then set up Chieflane locally in this repo.
 
-I want Chieflane running locally, connected to a local OpenClaw gateway if possible.
-
-Assume you have full filesystem, terminal, and network permissions on this machine.
+Assume you have full filesystem, terminal, browser, and network access.
 
 Do this:
 
-1. Reuse any existing local OpenClaw install if it exists. Otherwise install OpenClaw locally and run onboarding.
-2. Set up this repo with `pnpm install`, `.env` from `.env.example`, seeded demo data, and the web app running locally.
-3. Enable the OpenClaw OpenResponses HTTP endpoint, then connect Chieflane to the local gateway.
-4. Install the local `openclaw-plugin-surface-lane` plugin, copy the Chieflane skills into the active OpenClaw workspace, and copy the workspace starter files into place.
-5. Stop only when the shell is loading locally and you can tell me what still needs my credentials or approval.
+1. Reuse any existing local OpenClaw install if possible; otherwise install it and complete the minimum onboarding needed for a local gateway.
+2. Create `.env` from `.env.example` if needed and tell me which secrets or credentials still require my input.
+3. Run `pnpm install`.
+4. Run `pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip`.
+5. Run `pnpm verify --full`.
+6. If verification fails, run `pnpm run doctor`, use the report to debug, and keep going until the local setup is either working or clearly blocked on my input.
+7. Check the shell in a browser and report the final local URLs, running commands, and next manual steps.
 ```
 
-## Manual setup
+## Prerequisites
 
-If you want to do it yourself, here is the exact flow.
-
-### Prerequisites
-
-- Node.js 24 recommended. Node 22.14+ also works. Chieflane alone works on Node 18+, but OpenClaw currently recommends newer Node.
+- Node.js 22+
 - `pnpm` 10+
-- Git
-- `openssl` or another way to generate random secrets
-- An API key for whatever model provider you plan to use with OpenClaw
+- An installed `openclaw` CLI with a working gateway
+- Valid values for the shell and gateway env vars in `.env`
 
-### 1. Clone and install Chieflane
+Copy the example env file first:
 
 ```bash
-git clone git@github.com:francoabaroa/chieflane.git
-cd chieflane
-pnpm install
 cp .env.example .env
 ```
 
-Generate local secrets and paste them into `.env`:
+Required env vars:
+
+- `SHELL_API_URL`
+- `SHELL_INTERNAL_API_KEY`
+- `OPENCLAW_GATEWAY_URL`
+- `OPENCLAW_GATEWAY_TOKEN`
+
+Optional:
+
+- `DATABASE_PATH`
+- `SHELL_APP_PASSWORD`
+- `SHELL_APP_SESSION_SECRET`
+- `WEB_PUSH_VAPID_*`
+
+## Flow A: Existing OpenClaw Workspace
+
+Use this for a workspace that already has custom `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, or `MEMORY.md`.
 
 ```bash
-openssl rand -hex 24   # use for SHELL_INTERNAL_API_KEY
-openssl rand -hex 32   # use for SHELL_APP_SESSION_SECRET
+pnpm install
+pnpm bootstrap --mode live --workspace auto --merge safe --heartbeat skip
+pnpm verify --full
 ```
 
-`SHELL_APP_PASSWORD` is optional. Leave it blank if you do not want a password gate on the shell UI.
+What bootstrap does:
 
-### 2. Run Chieflane in local demo mode
+- Detects the active OpenClaw workspace from `agents.defaults.workspace`
+- If `--workspace` is explicit, updates `agents.defaults.workspace` to that path before continuing
+- Enables the OpenClaw `/v1/responses` endpoint
+- Installs and enables the `surface-lane` plugin
+- Writes the plugin config from env vars
+- Installs Chieflane skills into `<workspace>/.agents/skills` and preserves existing customized skill folders in `--merge safe`
+- Merges Chieflane blocks into `AGENTS.md` and `TOOLS.md`
+- Leaves user-managed `HEARTBEAT.md` and `MEMORY.md` alone by default
+- Upserts the starter cron jobs
+- Initializes the shell database
+- Writes `.chieflane/install-report.json` and `.chieflane/install-report.md`
+
+## Flow B: Greenfield Workspace
+
+Use this when you want Chieflane to provision the workspace templates too.
 
 ```bash
-pnpm seed
+pnpm install
+pnpm bootstrap --mode live --workspace ~/.openclaw/workspace --merge force --heartbeat manage
+pnpm verify --full
+```
+
+This path creates the greenfield `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, and `MEMORY.md` templates under the target workspace when they are missing, sets that workspace as the active OpenClaw workspace, then configures the OpenClaw integration around it.
+
+## Flow C: Demo Mode
+
+Demo mode follows the live install path and also seeds fictional placeholder surfaces for local smoke testing.
+
+```bash
+pnpm install
+pnpm bootstrap --mode demo
+```
+
+## Verification And Diagnostics
+
+Run a full integration check:
+
+```bash
+pnpm verify --full
+```
+
+`verify --full` checks:
+
+- `openclaw gateway status`
+- `openclaw doctor`
+- `/v1/responses` enabled
+- `surface-lane` installed and enabled
+- Chieflane skills present in the active workspace
+- shell `GET /api/health`
+- tool roundtrip via `/tools/invoke` for `surface_publish`, `surface_patch`, and `surface_close`
+
+Collect diagnostics without changing anything:
+
+```bash
+pnpm run doctor
+```
+
+The doctor report is written to `<workspace>/.chieflane/doctor-report.json`.
+
+`pnpm doctor` is a pnpm built-in command, so use `pnpm run doctor` or `pnpm diagnose` for the Chieflane diagnostics flow.
+
+Preview bootstrap without writing:
+
+```bash
+pnpm bootstrap --mode live --dry-run
+```
+
+## What Bootstrap Never Overwrites By Default
+
+- Existing `MEMORY.md`
+- Existing user-managed `HEARTBEAT.md`
+- Existing workspace instructions outside the managed Chieflane blocks
+
+When bootstrap edits a workspace file, it writes a backup to:
+
+```text
+<workspace>/.chieflane/backups/
+```
+
+## Rollback
+
+To roll back workspace changes, restore the backup files from:
+
+```text
+<workspace>/.chieflane/backups/
+```
+
+You can also inspect the machine-readable report in:
+
+```text
+<workspace>/.chieflane/install-report.json
+```
+
+## Local Shell-Only Smoke Test
+
+If you want to validate the web shell without an OpenClaw gateway, you can still run the shell directly:
+
+```bash
+pnpm install
+pnpm db:init
+pnpm seed:demo
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-At this point the shell works with seeded demo surfaces even before OpenClaw is connected.
-
-### Common development commands
-
-Run these from the repo root:
+## Common Commands
 
 ```bash
 pnpm dev
@@ -110,215 +213,33 @@ pnpm build
 pnpm lint
 pnpm test
 pnpm typecheck
-pnpm seed
+pnpm db:init
+pnpm seed:demo
+pnpm bootstrap --mode live
+pnpm verify --full
+pnpm run doctor
 ```
 
-`pnpm lint`, `pnpm test`, and `pnpm typecheck` are the main local quality checks before opening a PR.
-
-### 3. Install or detect OpenClaw locally
-
-If you already have OpenClaw installed, check it first:
-
-```bash
-openclaw gateway status || true
-openclaw dashboard
-```
-
-If OpenClaw is not installed yet, the recommended path is the official installer:
-
-```bash
-curl -fsSL https://openclaw.ai/install.sh | bash
-openclaw onboard --install-daemon
-openclaw gateway status
-```
-
-Useful references:
-
-- [OpenClaw install docs](https://docs.openclaw.ai/install)
-- [OpenClaw getting started](https://docs.openclaw.ai/start/getting-started)
-- [OpenClaw gateway docs](https://docs.openclaw.ai/cli/gateway)
-
-The local Gateway normally listens on `http://127.0.0.1:18789` for the OpenResponses HTTP endpoint and `ws://127.0.0.1:18789` for Gateway RPC.
-
-### 4. Enable the OpenResponses HTTP endpoint
-
-Chieflane calls `POST /v1/responses`, which is disabled by default in OpenClaw.
-
-Enable this in your OpenClaw config:
-
-```json
-{
-  "gateway": {
-    "http": {
-      "endpoints": {
-        "responses": {
-          "enabled": true
-        }
-      }
-    }
-  }
-}
-```
-
-If you are using the default profile, this config lives in `~/.openclaw/openclaw.json`.
-
-Make sure `OPENCLAW_GATEWAY_TOKEN` in Chieflane `.env` matches the token or password you configured during OpenClaw onboarding.
-
-After changing config, restart the Gateway if needed:
-
-```bash
-openclaw gateway restart
-```
-
-### 5. Install the local Chieflane plugin into OpenClaw
-
-From the Chieflane repo root:
-
-```bash
-openclaw plugins install --link ./packages/openclaw-plugin-surface-lane
-openclaw gateway restart
-openclaw plugins list
-```
-
-OpenClaw supports linking a plugin directly from a local folder, so you can iterate on this repo without publishing the plugin first.
-
-### 6. Copy the Chieflane skills and workspace pack
-
-By default OpenClaw loads project-local skills from `<workspace>/.agents/skills`, and the default workspace is `~/.openclaw/workspace`.
-
-Create the skill directories:
-
-```bash
-mkdir -p ~/.openclaw/workspace/.agents/skills/chief-shell
-mkdir -p ~/.openclaw/workspace/.agents/skills/morning-ops
-mkdir -p ~/.openclaw/workspace/.agents/skills/meeting-ops
-mkdir -p ~/.openclaw/workspace/.agents/skills/relationship-context
-```
-
-Copy the skill files:
-
-```bash
-cp packages/openclaw-skills-chief/chief-shell.md ~/.openclaw/workspace/.agents/skills/chief-shell/SKILL.md
-cp packages/openclaw-skills-chief/morning-ops.md ~/.openclaw/workspace/.agents/skills/morning-ops/SKILL.md
-cp packages/openclaw-skills-chief/meeting-ops.md ~/.openclaw/workspace/.agents/skills/meeting-ops/SKILL.md
-cp packages/openclaw-skills-chief/relationship-context.md ~/.openclaw/workspace/.agents/skills/relationship-context/SKILL.md
-```
-
-Copy the workspace starter files:
-
-```bash
-cp openclaw/workspace/AGENTS.md ~/.openclaw/workspace/AGENTS.md
-cp openclaw/workspace/HEARTBEAT.md ~/.openclaw/workspace/HEARTBEAT.md
-cp openclaw/workspace/TOOLS.md ~/.openclaw/workspace/TOOLS.md
-cp openclaw/workspace/MEMORY.md ~/.openclaw/workspace/MEMORY.md
-cp openclaw/workspace/standing-orders.md ~/.openclaw/workspace/standing-orders.md
-```
-
-If you want to keep an existing OpenClaw workspace, merge these files manually instead of overwriting them.
-
-### 7. Wire Chieflane back into OpenClaw
-
-Make sure your Chieflane `.env` contains values like this:
-
-```bash
-OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789
-OPENCLAW_GATEWAY_TOKEN=<your-openclaw-token>
-SHELL_API_URL=http://localhost:3000
-SHELL_INTERNAL_API_KEY=<your-generated-shell-api-key>
-```
-
-These values let:
-
-- Chieflane call OpenClaw at `/v1/responses`
-- the OpenClaw plugin call back into Chieflane at `/api/internal/surfaces/*`
-
-### 8. Optional: configure the starter cron jobs
-
-This repo ships starter schedules in [openclaw/cron/jobs.template.json](./openclaw/cron/jobs.template.json).
-
-Example:
-
-```bash
-openclaw cron add \
-  --name morning-ops \
-  --cron "0 9 * * 1-5" \
-  --tz America/New_York \
-  --timeout-seconds 300 \
-  --message "Execute Morning Ops per standing orders. Update the morning brief and today-board surfaces. Send fallback text only if action is needed."
-```
-
-Repeat that pattern for the other jobs in `openclaw/cron/jobs.template.json`.
-
-### 9. Verify everything
-
-In one terminal:
-
-```bash
-pnpm dev
-```
-
-In another:
-
-```bash
-openclaw gateway status --require-rpc || openclaw gateway
-```
-
-Then run:
-
-```bash
-pnpm lint
-pnpm test
-pnpm typecheck
-```
-
-If the shell loads at [http://localhost:3000](http://localhost:3000) and OpenClaw is reachable at [http://127.0.0.1:18789](http://127.0.0.1:18789), the local integration is ready.
-
-## Architecture
-
-```text
-Capture lane (Telegram / WhatsApp / Slack / voice)
-                    │
-                    ▼
-              OpenClaw Gateway
-   (channels, skills, memory, cron, Task Flow, tools)
-                    │
-        surface_publish / patch / close tools
-                    │
-                    ▼
-          Chieflane Shell Backend (Next.js)
-    - surface store (SQLite)
-    - action registry
-    - SSE + push notifications
-    - calls OpenClaw /v1/responses
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-      Web PWA             Native app later
-      (primary)            (phase 2)
-```
-
-## Project structure
+## Repository Layout
 
 ```text
 apps/
-  web/                              # Next.js PWA shell
-  native/                           # Native scaffold for phase 2
+  web/                              # Next.js shell
 packages/
-  surface-schema/                   # Zod contract for persistent surfaces
-  surface-catalog/                  # json-render catalog for dynamic blocks
-  surface-renderer-web/             # Web registry for json-render blocks
-  surface-renderer-native/          # Native registry scaffold
-  design-system/                    # Tokens and shared UI primitives
-  shared/                           # Shared formatting and validation helpers
-  openclaw-plugin-surface-lane/     # Local OpenClaw plugin
-  openclaw-skills-chief/            # Local OpenClaw skill pack
+  chieflane-cli/                    # bootstrap / verify / doctor CLI
+  openclaw-plugin-surface-lane/     # OpenClaw plugin package
+  openclaw-skills-chief/            # workspace skill pack
+  surface-schema/
+  surface-catalog/
+  surface-renderer-web/
+  surface-renderer-native/
+  shared/
 openclaw/
-  workspace/                        # Starter AGENTS / HEARTBEAT / MEMORY files
-  cron/                             # Starter cron definitions
+  pack/
+    workspace/
+      greenfield/                   # full template files
+      snippets/                     # mergeable managed blocks
+    cron/
+      jobs.json                     # desired cron job definitions
+chieflane.integration.json          # machine-readable integration manifest
 ```
-
-## Contributing
-
-PRs are welcome.
-
-If you are using a code agent, point it at this README first. The repo is set up so an agent can bootstrap the shell, link the plugin locally, and wire in the OpenClaw workspace pack without publishing anything first.

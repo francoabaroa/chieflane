@@ -1,14 +1,24 @@
 {
   "name": "@chieflane/openclaw-plugin-surface-lane",
-  "version": "0.1.0",
-  "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "version": "0.2.0",
+  "type": "module",
+  "private": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "openclaw.plugin.json"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "prepack": "pnpm run build"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  },
   "dependencies": {
     "@sinclair/typebox": "^0.33.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsup": "^8.3.5",
     "typescript": "^5.5.0"
   }
 }

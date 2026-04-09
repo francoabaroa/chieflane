@@ -1,4 +1,5 @@
 import { getDb } from "./index";
+import { initDb } from "./init";
 import { upsertSurfaceByKey } from "./surfaces";
 import {
   surfaceEnvelopeSchema,
@@ -785,6 +786,7 @@ const seeds: SurfaceEnvelopeInput[] = [
 
 async function main() {
   console.log("Seeding Chieflane database...");
+  initDb();
   const db = getDb();
 
   db.prepare("DELETE FROM action_runs").run();

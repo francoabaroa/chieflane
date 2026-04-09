@@ -8,6 +8,7 @@ import {
 
 const PUBLIC_PATHS = [
   "/login",
+  "/api/health",
   "/api/auth/login",
   "/api/auth/logout",
   "/manifest.json",
@@ -15,7 +16,7 @@ const PUBLIC_PATHS = [
   "/apple-icon",
 ];
 
-function isPublicPath(pathname: string) {
+export function isPublicPath(pathname: string) {
   return (
     PUBLIC_PATHS.some((path) => pathname.startsWith(path)) ||
     pathname.startsWith("/_next") ||
