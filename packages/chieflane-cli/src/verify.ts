@@ -16,6 +16,7 @@ import {
   runOpenClaw,
 } from "./openclaw";
 import { createInstallReport, type InstallReport } from "./report";
+import { runPreflight } from "./preflight";
 import {
   resolveRuntimeEnv,
   summarizeRuntimeEnv,
@@ -169,6 +170,7 @@ type VerifyDependencies = {
   findRepoRoot: typeof findRepoRoot;
   resolveVerifyWorkspace: typeof resolveVerifyWorkspace;
   createInstallReport: typeof createInstallReport;
+  runPreflight: typeof runPreflight;
   resolveRuntimeEnv: typeof resolveRuntimeEnv;
   withTemporaryShellIfNeeded: typeof withTemporaryShellIfNeeded;
   runVerifyInternal: typeof runVerifyInternal;
@@ -179,6 +181,7 @@ const defaultDependencies: VerifyDependencies = {
   findRepoRoot,
   resolveVerifyWorkspace,
   createInstallReport,
+  runPreflight,
   resolveRuntimeEnv,
   withTemporaryShellIfNeeded,
   runVerifyInternal,
@@ -200,11 +203,21 @@ export async function runVerify(
     options.workspace,
     context
   );
+  const preflight = await deps.runPreflight({
+    repoRoot,
+    workspace: options.workspace ?? "auto",
+    resolvedWorkspace: workspace,
+    workspaceSourceHint:
+      options.workspace && options.workspace !== "auto" ? "arg" : "state",
+    profile: context.profile,
+    dev: context.dev,
+  });
   const report = deps.createInstallReport({
     workspace,
     mode: "live",
   });
   report.openclawProfile = getOpenClawProfileLabel(context);
+  report.preflight = preflight;
 
   const runtimeEnv = await deps.resolveRuntimeEnv({
     repoRoot,

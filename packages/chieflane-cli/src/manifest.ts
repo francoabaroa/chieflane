@@ -84,6 +84,20 @@ const integrationManifestSchema = z.object({
   version: z.string().min(1),
   env: z.array(envVarSchema),
   openclaw: z.object({
+    configPlanning: z
+      .object({
+        gatewayPort: z
+          .object({
+            requiredForIsolatedProfiles: z.boolean(),
+            baseStride: z.number().int().positive(),
+            defaultSharedPort: z.number().int().positive(),
+            defaultDevPort: z.number().int().positive(),
+            namedProfileStart: z.number().int().positive(),
+            namedProfileEnd: z.number().int().positive(),
+          })
+          .optional(),
+      })
+      .optional(),
     config: z.array(configEntrySchema),
     plugin: pluginSchema,
     skills: z.array(skillSchema),

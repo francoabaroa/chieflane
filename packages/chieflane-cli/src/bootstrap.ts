@@ -27,6 +27,8 @@ import {
   type InstallReport,
   writeInstallReport,
 } from "./report";
+import { runPreflight } from "./preflight";
+import type { PreflightPlan } from "./preflight-types";
 import {
   resolveRuntimeEnv,
   summarizeRuntimeEnv,
@@ -45,6 +47,10 @@ export type BootstrapOptions = {
   dryRun?: boolean;
   profile?: string;
   dev?: boolean;
+};
+
+type RunBootstrapInput = Partial<BootstrapOptions> & {
+  preflightPlan?: PreflightPlan;
 };
 
 const VALID_MODES = new Set<BootstrapOptions["mode"]>(["live", "demo"]);
@@ -141,16 +147,20 @@ function pluginInstallArgs(
   }
 }
 
-function printScopeSummary(report: InstallReport) {
+function printScopeSummary(report: InstallReport, preflight: PreflightPlan) {
   console.log(`
 Chieflane will make gateway-profile changes in OpenClaw profile "${report.openclawProfile ?? "default"}":
+- config path: ${preflight.openclaw.configPath.value}
+- state dir: ${preflight.openclaw.stateDir.value}
+- gateway base port: ${preflight.openclaw.gateway.plannedPort}
+- gateway URL: ${preflight.openclaw.gateway.url}
 - enable /v1/responses
 - install + enable surface-lane
 - write plugin config
 - restart the gateway
 
 Workspace changes will target:
-- ${report.workspace}
+- ${preflight.openclaw.workspace.value}
 `.trim());
 }
 
@@ -171,7 +181,7 @@ function addGatewayScopedChanges(report: InstallReport) {
   );
 }
 
-export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
+export async function runBootstrap(rawOptions: RunBootstrapInput) {
   const options: BootstrapOptions = {
     mode: rawOptions.mode ?? "live",
     workspace: rawOptions.workspace ?? "auto",
@@ -191,32 +201,44 @@ export async function runBootstrap(rawOptions: Partial<BootstrapOptions>) {
     dev: options.dev === true,
   });
   const manifest = await loadManifest(repoRoot);
-  const workspace = await (async () => {
-    if (options.workspace !== "auto") {
-      return resolveWorkspacePath(options.workspace);
-    }
-
-    try {
-      return await getWorkspacePath();
-    } catch (error) {
-      if (options.dryRun) {
-        return defaultWorkspacePath();
-      }
-      throw error;
-    }
-  })();
+  const preflight =
+    rawOptions.preflightPlan ??
+    (await runPreflight({
+      repoRoot,
+      workspace: options.workspace,
+      profile: context.profile,
+      dev: context.dev,
+    }));
+  const workspace = preflight.openclaw.workspace.value;
   const report = createInstallReport({
     workspace,
     mode: options.mode,
   });
   report.openclawProfile = getOpenClawProfileLabel(context);
+  report.preflight = preflight;
   addGatewayScopedChanges(report);
-  printScopeSummary(report);
+  printScopeSummary(report, preflight);
 
   let runtimeEnv: ResolvedRuntimeEnv | null = null;
 
   try {
+    if (!options.dryRun && !preflight.ok) {
+      throw new Error(
+        `Preflight blocked: ${preflight.blockers
+          .map((blocker) => `${blocker.kind}: ${blocker.message}`)
+          .join("; ")}`
+      );
+    }
+
     if (!options.dryRun) {
+      if (
+        preflight.openclaw.isolated &&
+        preflight.openclaw.gateway.plannedPort !==
+        preflight.openclaw.gateway.configuredPort
+      ) {
+        await setConfig("gateway.port", preflight.openclaw.gateway.plannedPort, report);
+      }
+
       runtimeEnv = await resolveRuntimeEnv({
         repoRoot,
         allowGenerateGatewayToken: isIsolatedOpenClawContext(context),

@@ -13,7 +13,6 @@
       "required": false,
       "resolution": {
         "kind": "generated",
-        "persist": ".env.local",
         "sensitive": true
       }
     },
@@ -40,6 +39,16 @@
     { "name": "DATABASE_PATH", "required": false }
   ],
   "openclaw": {
+    "configPlanning": {
+      "gatewayPort": {
+        "requiredForIsolatedProfiles": true,
+        "baseStride": 20,
+        "defaultSharedPort": 18789,
+        "defaultDevPort": 19001,
+        "namedProfileStart": 19021,
+        "namedProfileEnd": 19981
+      }
+    },
     "config": [
       {
         "path": "gateway.http.endpoints.responses.enabled",

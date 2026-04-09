@@ -1,6 +1,7 @@
 import { cac } from "cac";
 import { runBootstrap } from "./bootstrap";
 import { runDoctor } from "./doctor";
+import { runPreflightCommand } from "./preflight";
 import { runSetupLocal } from "./setup-local";
 import {
   runShellStart,
@@ -18,6 +19,15 @@ function commonOpenClawOptions<T extends ReturnType<typeof cli.command>>(cmd: T)
       default: false,
     });
 }
+
+commonOpenClawOptions(
+  cli.command("preflight", "Resolve OpenClaw context, paths, ports, and planned mutations without writing")
+)
+  .option("--workspace <path>", "OpenClaw workspace path or auto", {
+    default: "auto",
+  })
+  .option("--json", "Print machine-readable output", { default: true })
+  .action(runPreflightCommand);
 
 commonOpenClawOptions(
   cli.command("bootstrap", "Install Chieflane into the active OpenClaw workspace")
@@ -68,6 +78,15 @@ commonOpenClawOptions(
   .option("--keep-shell", "Leave a local shell process running", {
     default: true,
   })
+  .option("--check", "Only print the plan; do not write anything", {
+    default: false,
+  })
+  .option("--open", "Open the shell URL after a successful setup", {
+    default: false,
+  })
+  .option("--browser-check", "Fetch the shell root and /api/health before finishing", {
+    default: false,
+  })
   .action(runSetupLocal);
 
 commonOpenClawOptions(
@@ -85,4 +104,4 @@ commonOpenClawOptions(
 ).action(runDoctor);
 
 cli.help();
-cli.parse();
+cli.parse(process.argv.filter((value) => value !== "--"));

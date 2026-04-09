@@ -1,12 +1,19 @@
 import path from "node:path";
-import fs from "fs-extra";
+import { browserCheck, openBrowser } from "./browser";
 import { runBootstrap } from "./bootstrap";
-import { isLocalShellUrl, startPersistentLocalShell } from "./local-shell";
+import {
+  getShellHealthUrl,
+  isLocalShellUrl,
+  isShellHealthy,
+  startPersistentLocalShell,
+  withTemporaryShellIfNeeded,
+} from "./local-shell";
 import { findRepoRoot } from "./manifest";
+import { runPreflight } from "./preflight";
+import type { PreflightPlan } from "./preflight-types";
 import {
   getOpenClawContextKey,
   getOpenClawProfileLabel,
-  isIsolatedOpenClawContext,
   primeOpenClawInvocationContext,
 } from "./openclaw";
 import { resolveRuntimeEnv } from "./runtime-env";
@@ -20,58 +27,40 @@ export type SetupLocalOptions = {
   keepShell?: boolean;
   profile?: string;
   dev?: boolean;
+  check?: boolean;
+  open?: boolean;
+  browserCheck?: boolean;
 };
 
 type SetupLocalDependencies = {
   findRepoRoot: typeof findRepoRoot;
   primeOpenClawInvocationContext: typeof primeOpenClawInvocationContext;
+  runPreflight: typeof runPreflight;
   resolveRuntimeEnv: typeof resolveRuntimeEnv;
   runBootstrap: typeof runBootstrap;
+  withTemporaryShellIfNeeded: typeof withTemporaryShellIfNeeded;
+  isShellHealthy: typeof isShellHealthy;
   startPersistentLocalShell: typeof startPersistentLocalShell;
-  writeFile: typeof fs.writeFile;
-  readFile: typeof fs.readFile;
-  chmod: typeof fs.chmod;
+  browserCheck: typeof browserCheck;
+  openBrowser: typeof openBrowser;
 };
 
 const defaultDependencies: SetupLocalDependencies = {
   findRepoRoot,
   primeOpenClawInvocationContext,
+  runPreflight,
   resolveRuntimeEnv,
   runBootstrap,
+  withTemporaryShellIfNeeded,
+  isShellHealthy,
   startPersistentLocalShell,
-  writeFile: fs.writeFile.bind(fs),
-  readFile: fs.readFile.bind(fs),
-  chmod: fs.chmod.bind(fs),
+  browserCheck,
+  openBrowser,
 };
 
-export async function ensureEnvLocal(
-  repoRoot: string,
-  deps: Pick<SetupLocalDependencies, "readFile" | "writeFile" | "chmod"> = defaultDependencies
-) {
-  const filePath = path.join(repoRoot, ".env.local");
-  const current = await deps.readFile(filePath, "utf8").catch(() => "");
-  const removedKeys = new Set<string>();
-
-  const nextLines = current
-    .split(/\r?\n/)
-    .filter((line) => line.length > 0)
-    .map((line) => {
-      const match = /^([A-Z0-9_]+)=/.exec(line);
-      if (!match) {
-        return line;
-      }
-
-      if (removedKeys.has(match[1])) {
-        return null;
-      }
-      return line;
-    })
-    .filter((line): line is string => line != null);
-
-  await deps.writeFile(filePath, `${nextLines.join("\n")}\n`, "utf8");
-  if (process.platform !== "win32") {
-    await deps.chmod(filePath, 0o600).catch(() => undefined);
-  }
+function resolvedShellPort(shellApiUrl: string) {
+  const parsed = new URL(shellApiUrl);
+  return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
 }
 
 export async function runSetupLocal(
@@ -85,16 +74,20 @@ export async function runSetupLocal(
     dev: options.dev === true,
   });
 
-  await ensureEnvLocal(repoRoot, deps);
-
-  const runtimeEnv = await deps.resolveRuntimeEnv({
+  const preflight = await deps.runPreflight({
     repoRoot,
-    allowGenerateGatewayToken: isIsolatedOpenClawContext(context),
-    allowGenerateShellInternalApiKey: true,
-    persistGeneratedValues: true,
+    workspace: options.workspace ?? "auto",
     profile: context.profile,
     dev: context.dev,
   });
+
+  if (options.check === true) {
+    console.log(JSON.stringify(preflight, null, 2));
+    if (!preflight.ok) {
+      process.exitCode = 1;
+    }
+    return preflight;
+  }
 
   const report = await deps.runBootstrap({
     mode: options.mode ?? "live",
@@ -103,6 +96,16 @@ export async function runSetupLocal(
     heartbeat: options.heartbeat ?? "skip",
     pluginSource: options.pluginSource ?? "path",
     dryRun: false,
+    profile: context.profile,
+    dev: context.dev,
+    preflightPlan: preflight,
+  });
+
+  const runtimeEnv = await deps.resolveRuntimeEnv({
+    repoRoot,
+    allowGenerateGatewayToken: preflight.openclaw.isolated,
+    allowGenerateShellInternalApiKey: true,
+    persistGeneratedValues: true,
     profile: context.profile,
     dev: context.dev,
   });
@@ -123,16 +126,89 @@ export async function runSetupLocal(
     }
   }
 
+  const finalPreflight: PreflightPlan = {
+    ...preflight,
+    openclaw: {
+      ...preflight.openclaw,
+      workspace: {
+        ...preflight.openclaw.workspace,
+        value: report.workspace,
+      },
+    },
+  };
+
   const finalSummary = {
     ok: report.errors.length === 0,
-    shellApiUrl: runtimeEnv.shellApiUrl,
-    shellHealthUrl: `${runtimeEnv.shellApiUrl.replace(/\/$/, "")}/api/health`,
-    gatewayUrl: runtimeEnv.gatewayUrl,
-    openclawProfile: getOpenClawProfileLabel(context),
-    workspace: report.workspace,
-    shell,
+    openclaw: {
+      profile: getOpenClawProfileLabel(context),
+      contextKey: getOpenClawContextKey(context),
+      stateDir: finalPreflight.openclaw.stateDir.value,
+      configPath: finalPreflight.openclaw.configPath.value,
+      workspace: report.workspace,
+      gatewayPort: finalPreflight.openclaw.gateway.plannedPort,
+      gatewayUrl: runtimeEnv.gatewayUrl,
+    },
+    shell: {
+      apiUrl: runtimeEnv.shellApiUrl,
+      healthUrl: getShellHealthUrl(runtimeEnv.shellApiUrl),
+      port: resolvedShellPort(runtimeEnv.shellApiUrl),
+      process: shell,
+    },
+    reports: {
+      installJson: path.join(report.workspace, ".chieflane", "install-report.json"),
+      installMd: path.join(report.workspace, ".chieflane", "install-report.md"),
+    },
     warnings,
   };
+
+  const runBrowserActions = async () => {
+    if (options.browserCheck === true) {
+      const browser = await deps.browserCheck(runtimeEnv.shellApiUrl);
+      if (!browser.rootOk || !browser.healthOk) {
+        throw new Error(
+          `Browser check failed for ${runtimeEnv.shellApiUrl} (rootOk=${browser.rootOk}, healthOk=${browser.healthOk}, healthStatus=${browser.healthStatus})`
+        );
+      }
+      Object.assign(finalSummary, {
+        browser,
+      });
+    }
+
+    if (options.open === true) {
+      const opened = await deps.openBrowser(runtimeEnv.shellApiUrl);
+      if (!opened) {
+        throw new Error(`Failed to open a browser for ${runtimeEnv.shellApiUrl}.`);
+      }
+      Object.assign(finalSummary, {
+        browserOpened: true,
+      });
+    }
+  };
+
+  if (options.browserCheck === true || options.open === true) {
+    const needsLocalShell = isLocalShellUrl(runtimeEnv.shellApiUrl);
+    if (options.keepShell === false && needsLocalShell) {
+      const shellAlreadyHealthy = await deps.isShellHealthy(runtimeEnv.shellApiUrl);
+      if (options.open === true && !shellAlreadyHealthy) {
+        throw new Error(
+          `Cannot use --open with --keep-shell=false unless the local shell is already running at ${runtimeEnv.shellApiUrl}.`
+        );
+      }
+
+      if (!shellAlreadyHealthy) {
+        await deps.withTemporaryShellIfNeeded({
+          repoRoot,
+          runtimeEnv,
+          openclawProfile: getOpenClawContextKey(context),
+          run: runBrowserActions,
+        });
+      } else {
+        await runBrowserActions();
+      }
+    } else {
+      await runBrowserActions();
+    }
+  }
 
   console.log(JSON.stringify(finalSummary, null, 2));
   return finalSummary;

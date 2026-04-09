@@ -2,20 +2,31 @@
 
 Chieflane is a manifest-driven shell integration pack for OpenClaw. It installs the `surface-lane` plugin, provisions the Chieflane skill pack into the active workspace, merges the workspace snippets, verifies the integration end to end, and runs the local shell.
 
-## Fastest Local Install
+## Fastest Zero-Assumption Local Setup
 
 ```bash
-pnpm setup-local
+node ./scripts/setup-local.mjs --check --dev
+node ./scripts/setup-local.mjs --dev --open
 ```
 
-This command:
+If you already have `pnpm`:
 
-- installs repo dependencies if needed
+```bash
+pnpm setup-local -- --dev --open
+```
+
+`setup-local --check` is a no-write preview. If `pnpm` or repo dependencies are not installed yet, the wrapper exits and tells you what to install instead of bootstrapping them for you.
+
+This flow:
+
+- bootstraps `pnpm` via Corepack when needed for setup runs
+- installs repo dependencies if needed for setup runs
 - discovers the active OpenClaw profile and workspace
-- derives or reuses local gateway settings when possible
+- prints the full OpenClaw context, paths, ports, and planned mutations with `--check`
+- auto-plans an isolated gateway base port for `--dev` and named profiles
 - bootstraps Chieflane
 - verifies the integration end to end
-- starts a local shell and prints the final URLs
+- starts a local shell and prints the final URLs plus config/state/report paths
 
 ### Important Scope Note
 
@@ -29,14 +40,23 @@ Bootstrap will:
 - restart the gateway
 
 A disposable workspace path does not isolate those changes.
+OpenClaw profile changes affect config and state, not just the workspace.
 
-For isolation, use a dedicated OpenClaw profile:
+For the safest isolated default, use `--dev`:
 
 ```bash
-pnpm setup-local -- --profile chieflane
-# or
-pnpm setup-local -- --dev
+node ./scripts/setup-local.mjs --check --dev
+node ./scripts/setup-local.mjs --dev --open
 ```
+
+For a persistent named profile:
+
+```bash
+node ./scripts/setup-local.mjs --check --profile chieflane
+node ./scripts/setup-local.mjs --profile chieflane --open
+```
+
+Chieflane auto-plans a unique `gateway.port` for isolated named profiles when needed.
 
 ## Use With Codex Or Claude Code
 
@@ -55,16 +75,17 @@ Assume you have full filesystem, terminal, browser, and network access.
 
 Use the safer isolated profile flow by default:
 
-pnpm setup-local -- --profile chieflane
+node ./scripts/setup-local.mjs --dev --open
 
 Do this:
 
-1. Check whether Node.js, pnpm, and the openclaw CLI are already installed.
+1. Check whether Node.js and the openclaw CLI are already installed.
 2. If OpenClaw is missing, install it using the official docs and stop only if you need credentials, login, or onboarding input from me.
-3. Run the local-first setup flow with the isolated profile above.
-4. If setup fails, run pnpm verify --full and pnpm run doctor, inspect the generated reports, fix what you can, and retry.
-5. Use the browser to confirm the shell is actually up and healthy.
-6. Leave me with the final local URLs, the OpenClaw profile/workspace you touched, what is still running, and any blockers or manual follow-up.
+3. Run `node ./scripts/setup-local.mjs --check --dev` first and show me the exact planned mutations.
+4. Run `node ./scripts/setup-local.mjs --dev --open --browser-check`.
+5. If setup fails, run `pnpm verify --full` and `pnpm run doctor`, inspect the generated reports, fix what you can, and retry.
+6. Use the browser to confirm the shell is actually up and healthy.
+7. Leave me with the final local URLs, the OpenClaw profile/workspace you touched, what is still running, and any blockers or manual follow-up.
 ```
 
 ### Claude Code Prompt
@@ -80,12 +101,12 @@ Assume you have full filesystem, terminal, browser, and network access.
 
 Use the safer isolated profile flow by default:
 
-pnpm setup-local -- --profile chieflane
+node ./scripts/setup-local.mjs --dev --open
 
 Do this:
 
 1. Reuse any existing local OpenClaw install if possible; otherwise install it and complete the minimum onboarding needed for a local gateway.
-2. Run the local-first setup flow with the isolated profile above.
+2. Run `node ./scripts/setup-local.mjs --check --dev` first, then `node ./scripts/setup-local.mjs --dev --open --browser-check`.
 3. If setup fails, run pnpm verify --full and pnpm run doctor, use the reports to debug, and keep going until the local setup is working or clearly blocked on my input.
 4. Open the shell in a browser, confirm the health endpoint works, and report the final URLs, running processes, and next manual steps.
 ```
@@ -162,6 +183,12 @@ Preview bootstrap without writing:
 pnpm bootstrap --mode live --dry-run
 ```
 
+Resolve the full OpenClaw plan without writing:
+
+```bash
+pnpm preflight -- --profile chieflane
+```
+
 The install report is written to:
 
 ```text
@@ -175,6 +202,21 @@ The doctor report is written to:
 <workspace>/.chieflane/doctor-report.json
 ```
 
+`setup-local --check` prints:
+
+- OpenClaw profile label
+- OpenClaw state dir
+- OpenClaw config path
+- workspace path
+- planned gateway base port and reserved range
+- shell URL and health URL
+- exact planned mutations
+
+If `openclaw` is missing, install it with:
+
+- macOS/Linux/WSL: `curl -fsSL https://openclaw.ai/install.sh | bash`
+- Windows PowerShell: `iwr -useb https://openclaw.ai/install.ps1 | iex`
+
 ## Local Shell Commands
 
 ```bash
@@ -183,15 +225,15 @@ pnpm shell:status
 pnpm shell:stop
 ```
 
-`pnpm setup-local` uses the same persistent shell flow and records the state in `.chieflane/runtime/`.
+`setup-local` uses the same persistent shell flow and records the state in `.chieflane/runtime/`.
 
 ## Prerequisites
 
 - Node.js 22+
-- `pnpm` 10+
+- `pnpm` 10+ or a Node install with `npm`/Corepack available
 - an installed `openclaw` CLI with a reachable gateway
 
-`.env.example` is now optional-overrides-first. Most local installs should not require manual edits before `pnpm setup-local`.
+`.env.example` is now optional-overrides-first. Most local installs should not require manual edits before `node ./scripts/setup-local.mjs`.
 
 ## What Bootstrap Leaves Alone By Default
 
@@ -222,7 +264,9 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Common Commands
 
 ```bash
-pnpm setup-local
+node ./scripts/setup-local.mjs --dev --open
+pnpm setup-local -- --dev --open
+pnpm preflight -- --dev
 pnpm bootstrap --mode live
 pnpm verify --full
 pnpm run doctor

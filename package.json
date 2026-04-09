@@ -8,6 +8,7 @@
     "seed:demo": "pnpm --filter @chieflane/web seed",
     "seed": "pnpm seed:demo",
     "setup-local": "node ./scripts/setup-local.mjs",
+    "preflight": "pnpm --filter @chieflane/cli preflight",
     "bootstrap": "pnpm --filter @chieflane/cli bootstrap",
     "verify": "pnpm --filter @chieflane/cli verify",
     "shell:start": "pnpm --filter @chieflane/cli exec tsx src/index.ts shell-start",

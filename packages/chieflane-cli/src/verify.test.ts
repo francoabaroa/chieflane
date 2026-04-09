@@ -10,6 +10,7 @@ import {
   getMissingWorkspaceSkills,
   runVerify,
 } from "./verify";
+import type { PreflightPlan } from "./preflight-types";
 
 const runtimeEnv: ResolvedRuntimeEnv = {
   shellApiUrl: "http://localhost:3000",
@@ -23,6 +24,56 @@ const runtimeEnv: ResolvedRuntimeEnv = {
     gatewayToken: "config",
   },
   warnings: [],
+};
+
+const preflightPlan: PreflightPlan = {
+  ok: true,
+  blockers: [],
+  warnings: [],
+  repoRoot: "/tmp/repo",
+  openclaw: {
+    profile: "default",
+    contextKey: "default",
+    isolated: false,
+    stateDir: {
+      value: "/Users/test/.openclaw",
+      source: "inferred",
+    },
+    configPath: {
+      value: "/Users/test/.openclaw/openclaw.json",
+      source: "inferred",
+    },
+    workspace: {
+      value: "/tmp/workspace",
+      source: "state",
+    },
+    gateway: {
+      configuredPort: 18789,
+      plannedPort: 18789,
+      reservedRange: {
+        start: 18789,
+        end: 18808,
+      },
+      url: "http://127.0.0.1:18789",
+      probe: {
+        ok: true,
+        multipleGateways: false,
+        targets: [{ url: "http://127.0.0.1:18789", ok: true }],
+      },
+    },
+  },
+  shell: {
+    plannedPort: 3000,
+    apiUrl: "http://localhost:3000",
+    healthUrl: "http://localhost:3000/api/health",
+  },
+  packageManager: {
+    pnpmAvailable: true,
+    corepackAvailable: true,
+    action: "none",
+    pinnedSpec: "pnpm@10.19.0",
+  },
+  mutations: [],
 };
 
 test("getMissingWorkspaceSkills checks both skills roots", async () => {
@@ -91,6 +142,7 @@ test("runVerify auto-starts a temporary shell when ensure-shell is auto", async 
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => {
         autoStartCalled = true;
@@ -122,6 +174,7 @@ test("runVerify skips shell auto-start when ensure-shell is never", async () => 
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => {
         autoStartCalled = true;
@@ -151,6 +204,7 @@ test("runVerify skips auto-start for remote shell URLs and still runs verificati
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
         shellApiUrl: "https://shell.example.com",
@@ -181,6 +235,7 @@ test("runVerify records the selected profile in the report", async () => {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => run(),
       runVerifyInternal: async () => undefined,
@@ -204,6 +259,7 @@ test("runVerify does not require SHELL_INTERNAL_API_KEY when the shell does not 
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
         shellInternalApiKey: "",
@@ -237,6 +293,7 @@ test("runVerify skips shell auto-start when no internal API key is available", a
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
         shellInternalApiKey: "",
@@ -272,6 +329,7 @@ test("runVerify respects an env-backed profile before workspace resolution", asy
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
       createInstallReport,
+      runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async (_options) => {
         capturedProfile = _options.profile;
         return runtimeEnv;

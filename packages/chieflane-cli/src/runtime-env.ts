@@ -121,6 +121,42 @@ function formatUrlHost(host: string) {
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
+export function deriveGatewayUrl(args: {
+  bind?: string | null;
+  port: number;
+}): { value: string; warnings: string[] } {
+  const warnings: string[] = [];
+  const bind = stripWrappingQuotes(normalizeValue(args.bind) ?? "loopback");
+
+  if (
+    bind === "loopback" ||
+    bind === "127.0.0.1" ||
+    bind === "localhost" ||
+    bind === "0.0.0.0"
+  ) {
+    return {
+      value: `http://127.0.0.1:${args.port}`,
+      warnings,
+    };
+  }
+
+  if (bind === "::1" || bind === "::") {
+    return {
+      value: `http://[::1]:${args.port}`,
+      warnings,
+    };
+  }
+
+  warnings.push(
+    `Gateway bind is ${bind}; using that host for OPENCLAW_GATEWAY_URL. Override manually if this repo is not running on the gateway host.`
+  );
+
+  return {
+    value: `http://${formatUrlHost(bind)}:${args.port}`,
+    warnings,
+  };
+}
+
 async function parseEnvFile(
   filePath: string,
   deps: RuntimeEnvDependencies
@@ -241,41 +277,17 @@ async function getPlainConfigString(
 async function discoverGatewayUrl(
   deps: RuntimeEnvDependencies
 ): Promise<{ value: string; source: EnvSource; warnings: string[] }> {
-  const warnings: string[] = [];
   const portRaw = normalizeValue(await deps.getConfigValue("gateway.port"));
   const bindRaw = normalizeValue(await deps.getConfigValue("gateway.bind"));
   const port = portRaw && /^\d+$/.test(portRaw) ? Number(portRaw) : 18789;
-  const bind = stripWrappingQuotes(bindRaw ?? "loopback");
-
-  if (
-    bind === "loopback" ||
-    bind === "127.0.0.1" ||
-    bind === "localhost" ||
-    bind === "0.0.0.0"
-  ) {
-    return {
-      value: `http://127.0.0.1:${port}`,
-      source: portRaw || bindRaw ? "config" : "default",
-      warnings,
-    };
-  }
-
-  if (bind === "::1" || bind === "::") {
-    return {
-      value: `http://[::1]:${port}`,
-      source: portRaw || bindRaw ? "config" : "default",
-      warnings,
-    };
-  }
-
-  warnings.push(
-    `Gateway bind is ${bind}; using that host for OPENCLAW_GATEWAY_URL. Override manually if this repo is not running on the gateway host.`
-  );
-
+  const derived = deriveGatewayUrl({
+    bind: bindRaw,
+    port,
+  });
   return {
-    value: `http://${formatUrlHost(bind)}:${port}`,
-    source: "config",
-    warnings,
+    value: derived.value,
+    source: portRaw || bindRaw ? "config" : "default",
+    warnings: derived.warnings,
   };
 }
 

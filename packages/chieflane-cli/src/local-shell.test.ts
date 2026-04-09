@@ -940,3 +940,10 @@ test("getShellHealthUrl preserves an existing base path", () => {
     "https://example.com/chieflane/api/health"
   );
 });
+
+test("getShellHealthUrl strips query and hash while preserving the base path", () => {
+  assert.equal(
+    getShellHealthUrl("https://example.com/chieflane?tenant=a#shell"),
+    "https://example.com/chieflane/api/health"
+  );
+});

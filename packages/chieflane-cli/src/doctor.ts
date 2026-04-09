@@ -1,4 +1,5 @@
 import { findRepoRoot, getRequiredEnvNames, loadManifest } from "./manifest";
+import { getShellHealthUrl } from "./local-shell";
 import {
   defaultWorkspacePath,
   getOpenClawProfileLabel,
@@ -11,6 +12,7 @@ import {
   type DoctorReport,
   writeDoctorReport,
 } from "./report";
+import { runPreflight } from "./preflight";
 import { resolveShellApiUrl } from "./runtime-env";
 
 function errorMessage(error: unknown) {
@@ -45,9 +47,16 @@ export async function runDoctor(options: { profile?: string; dev?: boolean } = {
     profile: options.profile,
     dev: options.dev === true,
   });
+  const preflight = await runPreflight({
+    repoRoot,
+    profile: context.profile,
+    dev: context.dev,
+  });
 
   const manifest = await loadManifest(repoRoot);
-  const report = createDoctorReport(defaultWorkspacePath());
+  const report = createDoctorReport(preflight.openclaw.workspace.value);
+  report.openclawProfile = getOpenClawProfileLabel(context);
+  report.preflight = preflight;
 
   try {
     await recordCheck(report, "workspace-resolution", async () => {
@@ -122,7 +131,7 @@ export async function runDoctor(options: { profile?: string; dev?: boolean } = {
         profile: context.profile,
         dev: context.dev,
       });
-      const response = await fetch(`${shellApiUrl}/api/health`);
+      const response = await fetch(getShellHealthUrl(shellApiUrl));
       if (!response.ok) {
         throw new Error(`Shell health failed (${response.status})`);
       }

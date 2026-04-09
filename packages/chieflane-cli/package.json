@@ -7,6 +7,7 @@
     "chieflane": "./src/index.ts"
   },
   "scripts": {
+    "preflight": "tsx src/index.ts preflight",
     "bootstrap": "tsx src/index.ts bootstrap",
     "verify": "tsx src/index.ts verify",
     "setup-local": "tsx src/index.ts setup-local",

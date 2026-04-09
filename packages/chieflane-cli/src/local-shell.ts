@@ -77,8 +77,10 @@ const defaultDependencies: LocalShellDependencies = {
   getProcessCommandLine,
 };
 
-function ensureTrailingSlash(value: string) {
-  return value.endsWith("/") ? value : `${value}/`;
+function resolveShellPath(basePathname: string, relativePath: string) {
+  const normalizedBase =
+    basePathname.endsWith("/") ? basePathname : `${basePathname}/`;
+  return new URL(relativePath, `http://placeholder${normalizedBase}`).pathname;
 }
 
 function normalizeHost(host: string) {
@@ -126,7 +128,11 @@ function shellDevArgs(shellApiUrl: string) {
 }
 
 export function getShellHealthUrl(shellApiUrl: string) {
-  return new URL("api/health", ensureTrailingSlash(shellApiUrl)).toString();
+  const parsed = new URL(shellApiUrl);
+  parsed.search = "";
+  parsed.hash = "";
+  parsed.pathname = resolveShellPath(parsed.pathname, "api/health");
+  return parsed.toString();
 }
 
 export function isLocalShellUrl(shellApiUrl: string) {

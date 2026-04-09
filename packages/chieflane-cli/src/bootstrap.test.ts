@@ -10,6 +10,7 @@ import {
 } from "./bootstrap";
 import { getShellHealthUrl } from "./local-shell";
 import { createInstallReport } from "./report";
+import type { PreflightPlan } from "./preflight-types";
 
 const REQUIRED_ENV = [
   "SHELL_API_URL",
@@ -17,6 +18,61 @@ const REQUIRED_ENV = [
   "OPENCLAW_GATEWAY_URL",
   "OPENCLAW_GATEWAY_TOKEN",
 ] as const;
+
+const blockedPreflightPlan: PreflightPlan = {
+  ok: false,
+  blockers: [
+    {
+      kind: "gateway-port",
+      message: "Could not find a free isolated gateway base port.",
+    },
+  ],
+  warnings: [],
+  repoRoot: "/tmp/repo",
+  openclaw: {
+    profile: "chieflane",
+    contextKey: "chieflane",
+    isolated: true,
+    stateDir: {
+      value: "/Users/test/.openclaw-chieflane",
+      source: "inferred",
+    },
+    configPath: {
+      value: "/Users/test/.openclaw-chieflane/openclaw.json",
+      source: "inferred",
+    },
+    workspace: {
+      value: "/tmp/workspace",
+      source: "arg",
+    },
+    gateway: {
+      configuredPort: null,
+      plannedPort: 18789,
+      reservedRange: {
+        start: 18789,
+        end: 18808,
+      },
+      url: "http://127.0.0.1:18789",
+      probe: {
+        ok: true,
+        multipleGateways: true,
+        targets: [{ url: "http://127.0.0.1:18789", ok: true }],
+      },
+    },
+  },
+  shell: {
+    plannedPort: 3000,
+    apiUrl: "http://localhost:3000",
+    healthUrl: "http://localhost:3000/api/health",
+  },
+  packageManager: {
+    pnpmAvailable: true,
+    corepackAvailable: true,
+    action: "none",
+    pinnedSpec: "pnpm@10.19.0",
+  },
+  mutations: [],
+};
 
 test("runBootstrap dry-run does not require integration secrets", async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-bootstrap-"));
@@ -61,6 +117,43 @@ test("runBootstrap dry-run does not require integration secrets", async () => {
         process.env[name] = value;
       }
     }
+    await fs.remove(workspace);
+  }
+});
+
+test("runBootstrap aborts live mutations when preflight reports blockers", async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-bootstrap-"));
+
+  try {
+    await assert.rejects(
+      () =>
+        runBootstrap({
+          mode: "live",
+          workspace,
+          merge: "safe",
+          heartbeat: "skip",
+          pluginSource: "path",
+          dryRun: false,
+          profile: "chieflane",
+          preflightPlan: {
+            ...blockedPreflightPlan,
+            openclaw: {
+              ...blockedPreflightPlan.openclaw,
+              workspace: {
+                value: workspace,
+                source: "arg",
+              },
+            },
+          },
+        }),
+      /Preflight blocked: gateway-port/
+    );
+
+    const report = (await fs.readJson(
+      path.join(workspace, ".chieflane", "install-report.json")
+    )) as { preflight?: { ok: boolean } };
+    assert.equal(report.preflight?.ok, false);
+  } finally {
     await fs.remove(workspace);
   }
 });

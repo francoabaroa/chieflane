@@ -1,5 +1,6 @@
 import fs from "fs-extra";
 import path from "node:path";
+import type { PreflightPlan } from "./preflight-types";
 import type { RuntimeEnvReport } from "./runtime-env";
 import { isSensitiveConfigPath, redactValue } from "./sensitive";
 
@@ -9,6 +10,7 @@ export type InstallReport = {
   workspace: string;
   mode: "live" | "demo";
   openclawProfile?: string;
+  preflight?: PreflightPlan;
   gatewayScopedChanges: Array<{
     kind: "config" | "plugin" | "gateway-restart";
     label: string;
@@ -25,6 +27,8 @@ export type InstallReport = {
 
 export type DoctorReport = {
   workspace: string;
+  openclawProfile?: string;
+  preflight?: PreflightPlan;
   startedAt: string;
   finishedAt?: string;
   checks: ReportItem[];
@@ -152,6 +156,55 @@ function installReportMarkdown(report: InstallReport) {
           redacted: report.runtimeEnv.gatewayToken.redacted,
         },
       ];
+  const preflightContext =
+    report.preflight == null
+      ? []
+      : [
+          {
+            key: "profile",
+            value: report.preflight.openclaw.profile,
+          },
+          {
+            key: "contextKey",
+            value: report.preflight.openclaw.contextKey,
+          },
+          {
+            key: "stateDir",
+            source: report.preflight.openclaw.stateDir.source,
+            value: report.preflight.openclaw.stateDir.value,
+          },
+          {
+            key: "configPath",
+            source: report.preflight.openclaw.configPath.source,
+            value: report.preflight.openclaw.configPath.value,
+          },
+          {
+            key: "workspace",
+            source: report.preflight.openclaw.workspace.source,
+            value: report.preflight.openclaw.workspace.value,
+          },
+          {
+            key: "gatewayPort",
+            value: report.preflight.openclaw.gateway.plannedPort,
+          },
+          {
+            key: "gatewayUrl",
+            value: report.preflight.openclaw.gateway.url,
+          },
+          {
+            key: "shellPort",
+            value: report.preflight.shell.plannedPort,
+          },
+          {
+            key: "shellApiUrl",
+            value: report.preflight.shell.apiUrl,
+          },
+          {
+            key: "shellHealthUrl",
+            value: report.preflight.shell.healthUrl,
+          },
+        ];
+  const preflightMutations = report.preflight?.mutations ?? [];
 
   return [
     "# Chieflane Install Report",
@@ -165,8 +218,14 @@ function installReportMarkdown(report: InstallReport) {
     "## Gateway Scope",
     formatItems(gatewayScopedChanges),
     "",
+    "## OpenClaw Context",
+    formatItems(preflightContext),
+    "",
     "## Runtime Env",
     formatItems(runtimeEnv),
+    "",
+    "## Planned Mutations",
+    formatItems(preflightMutations),
     "",
     "## Changed",
     formatItems(changed),

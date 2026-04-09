@@ -28,6 +28,7 @@
       "type": "object",
       "required": ["config", "plugin", "skills", "workspace", "cron", "healthChecks"],
       "properties": {
+        "configPlanning": { "type": "object" },
         "config": { "type": "array" },
         "plugin": { "type": "object" },
         "skills": { "type": "array" },
