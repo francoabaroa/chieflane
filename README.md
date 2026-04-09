@@ -38,6 +38,58 @@ pnpm setup-local -- --profile chieflane
 pnpm setup-local -- --dev
 ```
 
+## Use With Codex Or Claude Code
+
+If you want a coding agent to do the local setup for you, give it the current local-first flow instead of the older manual env/bootstrap steps.
+
+### Codex Prompt
+
+```text
+Hi Codex.
+
+Clone https://github.com/francoabaroa/chieflane into my current directory.
+
+Then read README.md first. I want to get Chieflane running locally on my Mac.
+
+Assume you have full filesystem, terminal, browser, and network access.
+
+Use the safer isolated profile flow by default:
+
+pnpm setup-local -- --profile chieflane
+
+Do this:
+
+1. Check whether Node.js, pnpm, and the openclaw CLI are already installed.
+2. If OpenClaw is missing, install it using the official docs and stop only if you need credentials, login, or onboarding input from me.
+3. Run the local-first setup flow with the isolated profile above.
+4. If setup fails, run pnpm verify --full and pnpm run doctor, inspect the generated reports, fix what you can, and retry.
+5. Use the browser to confirm the shell is actually up and healthy.
+6. Leave me with the final local URLs, the OpenClaw profile/workspace you touched, what is still running, and any blockers or manual follow-up.
+```
+
+### Claude Code Prompt
+
+```text
+Hi Claude.
+
+Clone https://github.com/francoabaroa/chieflane into my current directory.
+
+Then read README.md first. I want to get Chieflane running locally on my Mac.
+
+Assume you have full filesystem, terminal, browser, and network access.
+
+Use the safer isolated profile flow by default:
+
+pnpm setup-local -- --profile chieflane
+
+Do this:
+
+1. Reuse any existing local OpenClaw install if possible; otherwise install it and complete the minimum onboarding needed for a local gateway.
+2. Run the local-first setup flow with the isolated profile above.
+3. If setup fails, run pnpm verify --full and pnpm run doctor, use the reports to debug, and keep going until the local setup is working or clearly blocked on my input.
+4. Open the shell in a browser, confirm the health endpoint works, and report the final URLs, running processes, and next manual steps.
+```
+
 ## Manual And Advanced Paths
 
 ### Existing Customized Workspace
