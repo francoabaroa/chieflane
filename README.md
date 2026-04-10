@@ -24,8 +24,9 @@ This flow:
 - discovers the active OpenClaw profile and workspace
 - prints the full OpenClaw context, paths, ports, and planned mutations with `--check`
 - auto-plans an isolated gateway base port for `--dev` and named profiles
-- bootstraps Chieflane
-- verifies the integration end to end
+- repairs an incomplete existing `surface-lane` plugin config before validated OpenClaw commands run
+- bootstraps the plugin, tool policy, workspace snippets, skills, cron jobs, and Chieflane agent contract
+- verifies the integration end to end and writes a dedicated verify report
 - starts a local shell and prints the final URLs plus config/state/report paths
 
 ### Important Scope Note
@@ -37,6 +38,9 @@ Bootstrap will:
 - enable `/v1/responses`
 - install and enable the `surface-lane` plugin
 - write plugin config
+- merge the managed Chieflane `AGENTS.md` / `TOOLS.md` contract blocks
+- install the Chieflane workspace skills
+- sync Chieflane cron jobs
 - restart the gateway
 
 A disposable workspace path does not isolate those changes.
@@ -138,6 +142,16 @@ pnpm bootstrap --mode demo
 
 `verify --full` auto-starts a temporary local shell only when `SHELL_API_URL` resolves to a local host and the shell is not already running. Remote shells are never auto-started.
 
+### Publish A Visible Test Surface
+
+After setup succeeds, empty lanes are normal until an agent, cron job, or manual test publishes a surface. To publish a visible demo card:
+
+```bash
+pnpm publish-test-surface -- --dev --open
+```
+
+Use the same `--profile <name>` or `--dev` flag that you used for setup. The shell also shows a first-run empty state with a `Publish test surface` button when setup is healthy and no non-verification surfaces have been published yet.
+
 ## Local Env Behavior
 
 For local token-auth gateways, Chieflane can usually derive:
@@ -164,12 +178,20 @@ pnpm verify --full
 
 - runtime env resolution sources
 - `openclaw gateway status`
-- `openclaw doctor`
+- `openclaw config validate`
+- OpenClaw health
 - `/v1/responses` enabled
 - `surface-lane` installed and enabled
 - Chieflane skills present in `skills/` or `.agents/skills/`
 - shell `GET /api/health`
 - tool roundtrip via `/tools/invoke` for `surface_publish`, `surface_patch`, and `surface_close`
+
+By default, `verify` also runs an optional real-agent smoke test in warning mode. Use:
+
+```bash
+pnpm verify -- --full --agent-smoke off
+pnpm verify -- --full --agent-smoke required
+```
 
 Collect diagnostics without changing anything:
 
@@ -196,11 +218,28 @@ The install report is written to:
 <workspace>/.chieflane/install-report.md
 ```
 
+The verify report is written to:
+
+```text
+<workspace>/.chieflane/verify-report.json
+<workspace>/.chieflane/verify-report.md
+```
+
 The doctor report is written to:
 
 ```text
 <workspace>/.chieflane/doctor-report.json
 ```
+
+Bootstrap also writes:
+
+```text
+<workspace>/.chieflane/bootstrap-checkpoint.json
+<workspace>/.chieflane/current-status.json
+.chieflane/current-status.json
+```
+
+The repo-local `.chieflane/current-status.json` is a generated local status pointer for the debug setup-status endpoint and is ignored by git.
 
 `setup-local --check` prints:
 
@@ -216,6 +255,22 @@ If `openclaw` is missing, install it with:
 
 - macOS/Linux/WSL: `curl -fsSL https://openclaw.ai/install.sh | bash`
 - Windows PowerShell: `iwr -useb https://openclaw.ai/install.ps1 | iex`
+
+### Partial Bootstrap Recovery
+
+Plain `pnpm bootstrap` reruns all bootstrap steps so repo updates to skills, snippets, plugin code, and cron jobs are applied. If a previous run failed partway through and you intentionally want to resume from the checkpoint, use:
+
+```bash
+pnpm bootstrap -- --resume
+pnpm bootstrap -- --from-step cron-sync
+```
+
+To retry only Chieflane cron jobs:
+
+```bash
+pnpm sync-cron -- --dev
+pnpm sync-cron -- --profile chieflane
+```
 
 ## Local Shell Commands
 
@@ -269,6 +324,8 @@ pnpm setup-local -- --dev --open
 pnpm preflight -- --dev
 pnpm bootstrap --mode live
 pnpm verify --full
+pnpm sync-cron -- --dev
+pnpm publish-test-surface -- --dev --open
 pnpm run doctor
 pnpm shell:start
 pnpm shell:status
