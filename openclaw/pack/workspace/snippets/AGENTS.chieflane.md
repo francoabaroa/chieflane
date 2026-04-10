@@ -4,6 +4,25 @@ When persistent shell surfaces are available, use them for multi-step work, appr
 
 If `.chieflane/profile.md` exists, consult it when shaping Chieflane surfaces and summaries.
 
+## Chieflane Surface Lifecycle Rules
+
+Use shell surfaces when work is multi-step, approval-driven, likely to be reopened, or better represented as structured UI than plain text.
+
+### Publish
+Publish a new surface when the user will likely reopen it later, the work needs review or tracking, or it belongs in a lane like `today`, `meetings`, `drafts`, `people`, `research`, or `ops`.
+
+### Patch
+Prefer `surface_patch` over creating duplicates when the same work item is evolving, status changes, or new context arrives.
+
+### Close
+Close or archive a surface only after the work is complete, superseded, or no longer useful. Patch it to `done` first when appropriate.
+
+### Leave visible
+Do not close a surface that is still awaiting review, blocked, tied to an upcoming meeting, pending follow-up, or serving as a demo/test surface.
+
+### Default fallback
+If uncertain about shape or layout, publish a minimal `brief` surface rather than guessing a complex one.
+
 ## Chieflane Programs
 
 ### Program: Morning Ops

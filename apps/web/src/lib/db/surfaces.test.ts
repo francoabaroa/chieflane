@@ -9,6 +9,9 @@ import {
   closeSurface,
   createActionRun,
   getAllSurfaces,
+  getTotalSurfaceCount,
+  getUserSurfaceCount,
+  getSurfaceByKey,
   getSurfaceById,
   getSurfacesByLane,
   patchSurface,
@@ -105,6 +108,7 @@ test("surface persistence stores blocks, patches, and close state", () => {
 
   const loaded = getSurfaceById(surface.id);
   assert.equal(loaded?.status, "done");
+  assert.equal(getSurfaceByKey(surface.surfaceKey)?.id, surface.id);
 });
 
 test("action runs can be created and completed", () => {
@@ -225,4 +229,35 @@ test("lane and global queries exclude closed surfaces", () => {
     getAllSurfaces().map((surface) => surface.id),
     [openSurface.id]
   );
+  assert.equal(getTotalSurfaceCount(), 3);
+  assert.equal(getUserSurfaceCount(), 3);
+});
+
+test("user surface count excludes verification surfaces", () => {
+  process.env.DATABASE_PATH = createTempDbPath();
+
+  const verifySurface = upsertSurfaceByKey(
+    surfaceEnvelopeSchema.parse({
+      surfaceKey: "verify:chieflane:2026-04-10",
+      lane: "ops",
+      title: "Verify Surface",
+      summary: "Should not count as first-run history.",
+      payload: {
+        surfaceType: "brief",
+        data: {
+          headline: "Verify",
+          sections: [],
+        },
+      },
+      fallbackText: "Verify Surface",
+      freshness: {
+        generatedAt: "2026-04-10T09:00:00.000Z",
+      },
+    })
+  );
+  closeSurface(verifySurface.surfaceKey, "archived");
+
+  assert.equal(getAllSurfaces().length, 0);
+  assert.equal(getTotalSurfaceCount(), 1);
+  assert.equal(getUserSurfaceCount(), 0);
 });

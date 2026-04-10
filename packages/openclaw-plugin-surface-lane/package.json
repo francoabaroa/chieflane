@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "files": ["dist", "openclaw.plugin.json"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup --config tsup.config.ts",
     "prepack": "pnpm run build"
   },
   "openclaw": {
@@ -17,6 +17,7 @@
     "@sinclair/typebox": "^0.33.0"
   },
   "devDependencies": {
+    "@chieflane/surface-schema": "workspace:*",
     "@types/node": "^22.0.0",
     "tsup": "^8.3.5",
     "typescript": "^5.5.0"

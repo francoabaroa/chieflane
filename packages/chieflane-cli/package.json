@@ -18,10 +18,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@chieflane/surface-schema": "workspace:*",
     "cac": "^6.7.14",
     "dotenv": "^16.4.5",
     "execa": "^9.3.0",
     "fs-extra": "^11.2.0",
+    "json5": "^2.2.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

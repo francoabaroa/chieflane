@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { surfaceEnvelopeSchema } from "@chieflane/surface-schema";
+import { formatSurfaceValidationError } from "@chieflane/surface-schema/errors";
 import { upsertSurfaceByKey } from "@/lib/db/surfaces";
 import { fanoutEvent } from "@/lib/realtime";
 import { authorizeInternalRequest } from "@/lib/auth/internal";
@@ -26,7 +27,15 @@ export async function POST(req: NextRequest) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: parsed.error.flatten() },
+      {
+        ok: false,
+        error: formatSurfaceValidationError({
+          tool: "surface_publish",
+          error: parsed.error,
+          input: body,
+        }),
+        issues: parsed.error.issues,
+      },
       { status: 400 }
     );
   }

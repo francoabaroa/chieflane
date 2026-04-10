@@ -17,6 +17,7 @@ import {
   primeOpenClawInvocationContext,
 } from "./openclaw";
 import { resolveRuntimeEnv } from "./runtime-env";
+import { ensureRecoveredSurfaceLaneConfig } from "./plugin-config-recovery";
 
 export type SetupLocalOptions = {
   mode?: "live" | "demo";
@@ -35,6 +36,7 @@ export type SetupLocalOptions = {
 type SetupLocalDependencies = {
   findRepoRoot: typeof findRepoRoot;
   primeOpenClawInvocationContext: typeof primeOpenClawInvocationContext;
+  ensureRecoveredSurfaceLaneConfig?: typeof ensureRecoveredSurfaceLaneConfig;
   runPreflight: typeof runPreflight;
   resolveRuntimeEnv: typeof resolveRuntimeEnv;
   runBootstrap: typeof runBootstrap;
@@ -48,6 +50,7 @@ type SetupLocalDependencies = {
 const defaultDependencies: SetupLocalDependencies = {
   findRepoRoot,
   primeOpenClawInvocationContext,
+  ensureRecoveredSurfaceLaneConfig,
   runPreflight,
   resolveRuntimeEnv,
   runBootstrap,
@@ -73,7 +76,6 @@ export async function runSetupLocal(
     profile: options.profile,
     dev: options.dev === true,
   });
-
   const preflight = await deps.runPreflight({
     repoRoot,
     workspace: options.workspace ?? "auto",
@@ -87,6 +89,13 @@ export async function runSetupLocal(
       process.exitCode = 1;
     }
     return preflight;
+  }
+
+  if (deps.ensureRecoveredSurfaceLaneConfig) {
+    await deps.ensureRecoveredSurfaceLaneConfig({
+      repoRoot,
+      context,
+    });
   }
 
   const report = await deps.runBootstrap({
@@ -157,6 +166,10 @@ export async function runSetupLocal(
     reports: {
       installJson: path.join(report.workspace, ".chieflane", "install-report.json"),
       installMd: path.join(report.workspace, ".chieflane", "install-report.md"),
+      verifyJson: path.join(report.workspace, ".chieflane", "verify-report.json"),
+      verifyMd: path.join(report.workspace, ".chieflane", "verify-report.md"),
+      checkpointJson: path.join(report.workspace, ".chieflane", "bootstrap-checkpoint.json"),
+      currentStatusJson: path.join(repoRoot, ".chieflane", "current-status.json"),
     },
     warnings,
   };

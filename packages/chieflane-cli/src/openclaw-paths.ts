@@ -52,11 +52,14 @@ function inferStateDir(context: OpenClawInvocationContext) {
 
 export function resolveOpenClawPaths(args: {
   context: OpenClawInvocationContext;
-  workspace: string;
+  workspace?: string;
   env?: NodeJS.ProcessEnv;
   statusJson?: unknown;
 }) {
   const env = args.env ?? process.env;
+  const allowEnvPathOverrides =
+    args.context.dev !== true &&
+    (args.context.profile == null || args.context.profile === "default");
   const statusStateDir = visitStatusJson(
     args.statusJson,
     new Set(["stateDir", "stateDirectory", "stateRoot"])
@@ -66,7 +69,7 @@ export function resolveOpenClawPaths(args: {
     new Set(["configPath", "configFile"])
   );
 
-  const stateDir = env.OPENCLAW_STATE_DIR
+  const stateDir = allowEnvPathOverrides && env.OPENCLAW_STATE_DIR
     ? {
         value: expandHome(env.OPENCLAW_STATE_DIR),
         source: "env" as PathSource,
@@ -81,7 +84,7 @@ export function resolveOpenClawPaths(args: {
           source: "inferred" as PathSource,
         };
 
-  const configPath = env.OPENCLAW_CONFIG_PATH
+  const configPath = allowEnvPathOverrides && env.OPENCLAW_CONFIG_PATH
     ? {
         value: expandHome(env.OPENCLAW_CONFIG_PATH),
         source: "env" as PathSource,
@@ -99,6 +102,6 @@ export function resolveOpenClawPaths(args: {
   return {
     stateDir,
     configPath,
-    workspace: args.workspace,
+    ...(args.workspace != null ? { workspace: args.workspace } : {}),
   };
 }

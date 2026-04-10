@@ -34,6 +34,24 @@ export type DoctorReport = {
   checks: ReportItem[];
 };
 
+export type VerifyReport = {
+  workspace: string;
+  openclawProfile?: string;
+  preflight?: PreflightPlan;
+  runtimeEnv?: RuntimeEnvReport;
+  startedAt: string;
+  finishedAt?: string;
+  changed: ReportItem[];
+  checks: ReportItem[];
+  warnings: ReportItem[];
+  errors: ReportItem[];
+  summary?: {
+    ok: boolean;
+    firstFailedKind?: string;
+    failedKinds: string[];
+  };
+};
+
 export function createInstallReport(args: {
   workspace: string;
   mode: "live" | "demo";
@@ -56,6 +74,17 @@ export function createDoctorReport(workspace: string): DoctorReport {
     workspace,
     startedAt: new Date().toISOString(),
     checks: [],
+  };
+}
+
+export function createVerifyReport(args: { workspace: string }): VerifyReport {
+  return {
+    workspace: args.workspace,
+    startedAt: new Date().toISOString(),
+    changed: [],
+    checks: [],
+    warnings: [],
+    errors: [],
   };
 }
 
@@ -245,6 +274,65 @@ function installReportMarkdown(report: InstallReport) {
   ].join("\n");
 }
 
+function verifyReportMarkdown(report: VerifyReport) {
+  const changed = report.changed.map(sanitizeReportItem);
+  const checks = report.checks.map(sanitizeReportItem);
+  const warnings = report.warnings.map(sanitizeReportItem);
+  const errors = report.errors.map(sanitizeReportItem);
+  const runtimeEnv = report.runtimeEnv == null
+    ? []
+    : [
+        {
+          key: "shellApiUrl",
+          source: report.runtimeEnv.shellApiUrl.source,
+          value: report.runtimeEnv.shellApiUrl.value,
+        },
+        {
+          key: "shellInternalApiKey",
+          source: report.runtimeEnv.shellInternalApiKey.source,
+          redacted: report.runtimeEnv.shellInternalApiKey.redacted,
+        },
+        {
+          key: "gatewayUrl",
+          source: report.runtimeEnv.gatewayUrl.source,
+          value: report.runtimeEnv.gatewayUrl.value,
+        },
+        {
+          key: "gatewayToken",
+          source: report.runtimeEnv.gatewayToken.source,
+          redacted: report.runtimeEnv.gatewayToken.redacted,
+        },
+      ];
+
+  return [
+    "# Chieflane Verify Report",
+    "",
+    `- workspace: ${report.workspace}`,
+    `- openclawProfile: ${report.openclawProfile ?? "default"}`,
+    `- startedAt: ${report.startedAt}`,
+    `- finishedAt: ${report.finishedAt ?? ""}`,
+    `- ok: ${report.summary?.ok ?? (report.errors.length === 0)}`,
+    `- firstFailedKind: ${report.summary?.firstFailedKind ?? ""}`,
+    `- failedKinds: ${(report.summary?.failedKinds ?? []).join(", ")}`,
+    "",
+    "## Runtime Env",
+    formatItems(runtimeEnv),
+    "",
+    "## Changed",
+    formatItems(changed),
+    "",
+    "## Checks",
+    formatItems(checks),
+    "",
+    "## Warnings",
+    formatItems(warnings),
+    "",
+    "## Errors",
+    formatItems(errors),
+    "",
+  ].join("\n");
+}
+
 export async function writeInstallReport(
   workspace: string,
   report: InstallReport
@@ -282,4 +370,74 @@ export async function writeDoctorReport(
   await fs.writeJson(path.join(root, "doctor-report.json"), report, {
     spaces: 2,
   });
+}
+
+export async function writeVerifyReport(
+  workspace: string,
+  report: VerifyReport
+) {
+  report.finishedAt = new Date().toISOString();
+  report.summary = {
+    ok: report.errors.length === 0,
+    firstFailedKind:
+      report.checks.find((check) => check.ok === false)?.kind as string | undefined,
+    failedKinds: report.checks
+      .filter((check) => check.ok === false)
+      .map((check) => String(check.kind)),
+  };
+
+  const sanitizedReport: VerifyReport = {
+    ...report,
+    changed: report.changed.map(sanitizeReportItem),
+    checks: report.checks.map(sanitizeReportItem),
+    warnings: report.warnings.map(sanitizeReportItem),
+    errors: report.errors.map(sanitizeReportItem),
+  };
+
+  const root = chieflaneDir(workspace);
+  await fs.ensureDir(root);
+
+  const jsonPath = path.join(root, "verify-report.json");
+  const mdPath = path.join(root, "verify-report.md");
+  await fs.writeJson(jsonPath, sanitizedReport, { spaces: 2 });
+  await fs.writeFile(mdPath, verifyReportMarkdown(sanitizedReport), "utf8");
+
+  return { jsonPath, mdPath };
+}
+
+async function mergeJsonFile(
+  filePath: string,
+  patch: Record<string, unknown>
+) {
+  const current = await fs.readJson(filePath).catch(() => ({}));
+  const next = {
+    ...(current as Record<string, unknown>),
+    ...patch,
+  };
+  await fs.ensureDir(path.dirname(filePath));
+  await fs.writeJson(filePath, next, { spaces: 2 });
+  return filePath;
+}
+
+export async function writeCurrentStatus(args: {
+  workspace: string;
+  repoRoot?: string;
+  patch: Record<string, unknown>;
+}) {
+  const workspacePath = await mergeJsonFile(
+    path.join(chieflaneDir(args.workspace), "current-status.json"),
+    args.patch
+  );
+  const repoRootPath =
+    args.repoRoot == null
+      ? undefined
+      : await mergeJsonFile(
+          path.join(args.repoRoot, ".chieflane", "current-status.json"),
+          args.patch
+        );
+
+  return {
+    workspacePath,
+    repoRootPath,
+  };
 }

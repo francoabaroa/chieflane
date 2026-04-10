@@ -24,8 +24,11 @@ import {
 import { mergeWorkspaceFiles } from "./merge";
 import {
   createInstallReport,
+  createVerifyReport,
   type InstallReport,
+  writeCurrentStatus,
   writeInstallReport,
+  writeVerifyReport,
 } from "./report";
 import { runPreflight } from "./preflight";
 import type { PreflightPlan } from "./preflight-types";
@@ -37,6 +40,14 @@ import {
 import { installSkillsIntoWorkspace } from "./skills";
 import { writeLastBootstrapState } from "./state";
 import { runVerifyInternal } from "./verify";
+import { ensureRecoveredSurfaceLaneConfig } from "./plugin-config-recovery";
+import {
+  bootstrapCheckpointPath,
+  createBootstrapCheckpoint,
+  readBootstrapCheckpoint,
+  type BootstrapCheckpoint,
+  writeBootstrapCheckpoint,
+} from "./bootstrap-checkpoint";
 
 export type BootstrapOptions = {
   mode: "live" | "demo";
@@ -45,6 +56,8 @@ export type BootstrapOptions = {
   heartbeat: "skip" | "manage" | "force";
   pluginSource: "path" | "npm" | "clawhub" | "link";
   dryRun?: boolean;
+  resume?: boolean;
+  fromStep?: string;
   profile?: string;
   dev?: boolean;
 };
@@ -189,6 +202,8 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
     heartbeat: rawOptions.heartbeat ?? "skip",
     pluginSource: rawOptions.pluginSource ?? "path",
     dryRun: rawOptions.dryRun === true,
+    resume: rawOptions.resume === true,
+    fromStep: rawOptions.fromStep,
     profile: rawOptions.profile,
     dev: rawOptions.dev === true,
   };
@@ -220,6 +235,48 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
   printScopeSummary(report, preflight);
 
   let runtimeEnv: ResolvedRuntimeEnv | null = null;
+  let verifyReport = null as ReturnType<typeof createVerifyReport> | null;
+  let verifyReportPaths:
+    | {
+        jsonPath: string;
+        mdPath: string;
+      }
+    | null = null;
+  let checkpoint: BootstrapCheckpoint | null = null;
+  const stepIds = [
+    "raw-plugin-config-recovery",
+    "preflight",
+    "gateway-config",
+    "plugin-install-enable",
+    "tool-policy",
+    "workspace-skills",
+    "workspace-snippets",
+    "cron-sync",
+    "db-init",
+    "verify",
+  ] as const;
+  const fromStepIndex =
+    options.fromStep == null
+      ? 0
+      : stepIds.indexOf(options.fromStep as (typeof stepIds)[number]);
+  if (options.fromStep != null && fromStepIndex < 0) {
+    throw new Error(
+      `Unknown bootstrap step: ${options.fromStep}. Expected one of: ${stepIds.join(", ")}`
+    );
+  }
+
+  if (!options.dryRun) {
+    checkpoint =
+      (options.resume ? await readBootstrapCheckpoint(workspace) : null) ??
+      createBootstrapCheckpoint();
+    checkpoint.steps.preflight = {
+      ok: preflight.ok,
+      fatal: true,
+      startedAt: report.startedAt,
+      finishedAt: new Date().toISOString(),
+    };
+    await writeBootstrapCheckpoint(workspace, checkpoint);
+  }
 
   try {
     if (!options.dryRun && !preflight.ok) {
@@ -230,15 +287,75 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
       );
     }
 
-    if (!options.dryRun) {
-      if (
-        preflight.openclaw.isolated &&
-        preflight.openclaw.gateway.plannedPort !==
-        preflight.openclaw.gateway.configuredPort
-      ) {
-        await setConfig("gateway.port", preflight.openclaw.gateway.plannedPort, report);
+    const runBootstrapStep = async (step: {
+      id: (typeof stepIds)[number];
+      fatal: boolean;
+      run: () => Promise<void>;
+    }) => {
+      if (options.dryRun) {
+        await step.run();
+        return;
       }
 
+      if (!checkpoint) {
+        throw new Error("Bootstrap checkpoint was not initialized.");
+      }
+
+      const stepIndex = stepIds.indexOf(step.id);
+      if (stepIndex < fromStepIndex) {
+        report.skipped.push({
+          kind: "bootstrap-step",
+          step: step.id,
+          reason: "before-from-step",
+        });
+        return;
+      }
+
+      const previous = checkpoint.steps[step.id];
+      if (options.fromStep == null && options.resume && previous?.ok === true) {
+        report.skipped.push({
+          kind: "bootstrap-step",
+          step: step.id,
+          reason: "already-complete",
+        });
+        return;
+      }
+
+      checkpoint.steps[step.id] = {
+        ok: false,
+        fatal: step.fatal,
+        startedAt: new Date().toISOString(),
+      };
+      await writeBootstrapCheckpoint(workspace, checkpoint);
+
+      try {
+        await step.run();
+        checkpoint.steps[step.id] = {
+          ...checkpoint.steps[step.id],
+          ok: true,
+          finishedAt: new Date().toISOString(),
+        };
+      } catch (error) {
+        checkpoint.steps[step.id] = {
+          ...checkpoint.steps[step.id],
+          ok: false,
+          finishedAt: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        };
+        report.errors.push({
+          kind: step.id,
+          error: checkpoint.steps[step.id].error,
+        });
+        await writeBootstrapCheckpoint(workspace, checkpoint);
+        if (step.fatal) {
+          throw error;
+        }
+      }
+
+      await writeBootstrapCheckpoint(workspace, checkpoint);
+    };
+
+    if (!options.dryRun) {
       runtimeEnv = await resolveRuntimeEnv({
         repoRoot,
         allowGenerateGatewayToken: isIsolatedOpenClawContext(context),
@@ -255,52 +372,92 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
         });
       }
 
-      await runOpenClaw(["status"]);
-      await runOpenClaw(["gateway", "status"]);
-      await runOpenClaw(["doctor", "--fix", "--non-interactive"], {
-        reject: false,
+      await runBootstrapStep({
+        id: "raw-plugin-config-recovery",
+        fatal: true,
+        run: async () => {
+          await ensureRecoveredSurfaceLaneConfig({
+            repoRoot,
+            context,
+            report,
+          });
+        },
       });
-      await syncActiveWorkspace({
-        workspaceOption: options.workspace,
-        workspace,
-        report,
+
+      await runBootstrapStep({
+        id: "gateway-config",
+        fatal: true,
+        run: async () => {
+          if (
+            preflight.openclaw.isolated &&
+            preflight.openclaw.gateway.plannedPort !==
+            preflight.openclaw.gateway.configuredPort
+          ) {
+            await setConfig("gateway.port", preflight.openclaw.gateway.plannedPort, report);
+          }
+
+          await syncActiveWorkspace({
+            workspaceOption: options.workspace,
+            workspace,
+            report,
+          });
+
+          for (const configEntry of manifest.openclaw.config.filter(
+            (entry) => !entry.path.startsWith("plugins.entries.surface-lane.")
+          )) {
+            const value =
+              configEntry.fromEnv != null
+                ? buildShellChildEnv(runtimeEnv!)[configEntry.fromEnv]
+                : configEntry.value;
+            if (value == null) {
+              throw new Error(`Missing config value for ${configEntry.path}`);
+            }
+            await setConfig(configEntry.path, value, report);
+          }
+        },
       });
 
-      for (const configEntry of manifest.openclaw.config.filter(
-        (entry) => !entry.path.startsWith("plugins.entries.surface-lane.")
-      )) {
-        const value =
-          configEntry.fromEnv != null
-            ? buildShellChildEnv(runtimeEnv)[configEntry.fromEnv]
-            : configEntry.value;
-        if (value == null) {
-          throw new Error(`Missing config value for ${configEntry.path}`);
-        }
-        await setConfig(configEntry.path, value, report);
-      }
+      await runBootstrapStep({
+        id: "plugin-install-enable",
+        fatal: true,
+        run: async () => {
+          if (options.pluginSource === "path" || options.pluginSource === "link") {
+            await runPluginBuild(repoRoot);
+          }
 
-      if (options.pluginSource === "path" || options.pluginSource === "link") {
-        await runPluginBuild(repoRoot);
-      }
+          await installPlugin(pluginInstallArgs(options.pluginSource, repoRoot), report);
+          await enablePlugin(manifest.openclaw.plugin.id, report);
 
-      await installPlugin(pluginInstallArgs(options.pluginSource, repoRoot), report);
-      await enablePlugin(manifest.openclaw.plugin.id, report);
+          for (const configEntry of manifest.openclaw.config.filter((entry) =>
+            entry.path.startsWith("plugins.entries.surface-lane.")
+          )) {
+            const value =
+              configEntry.fromEnv != null
+                ? buildShellChildEnv(runtimeEnv!)[configEntry.fromEnv]
+                : configEntry.value;
+            if (value == null) {
+              throw new Error(`Missing config value for ${configEntry.path}`);
+            }
+            await setConfig(configEntry.path, value, report);
+          }
 
-      for (const configEntry of manifest.openclaw.config.filter((entry) =>
-        entry.path.startsWith("plugins.entries.surface-lane.")
-      )) {
-        const value =
-          configEntry.fromEnv != null
-            ? buildShellChildEnv(runtimeEnv)[configEntry.fromEnv]
-            : configEntry.value;
-        if (value == null) {
-          throw new Error(`Missing config value for ${configEntry.path}`);
-        }
-        await setConfig(configEntry.path, value, report);
-      }
+          await runOpenClaw(["config", "validate", "--json"]);
+          await restartGateway(report);
+        },
+      });
 
-      await restartGateway(report);
-      await runOpenClaw(["plugins", "inspect", manifest.openclaw.plugin.id]);
+      await runBootstrapStep({
+        id: "tool-policy",
+        fatal: true,
+        run: async () => {
+          await runOpenClaw(["plugins", "inspect", manifest.openclaw.plugin.id, "--json"]);
+          report.checks.push({
+            kind: "tool-policy",
+            ok: true,
+            strategy: "verified-via-plugin-inspect",
+          });
+        },
+      });
     } else {
       report.changed.push({
         kind: "bootstrap",
@@ -308,29 +465,47 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
       });
     }
 
-    await installSkillsIntoWorkspace({
-      manifest,
-      repoRoot,
-      workspace,
-      mergeStrategy: options.merge,
-      dryRun: options.dryRun ?? false,
-      report,
+    await runBootstrapStep({
+      id: "workspace-skills",
+      fatal: true,
+      run: async () => {
+        await installSkillsIntoWorkspace({
+          manifest,
+          repoRoot,
+          workspace,
+          mergeStrategy: options.merge,
+          dryRun: options.dryRun ?? false,
+          report,
+        });
+      },
     });
 
-    await mergeWorkspaceFiles({
-      manifest,
-      repoRoot,
-      workspace,
-      mergeStrategy: options.merge,
-      heartbeatMode: options.heartbeat,
-      dryRun: options.dryRun ?? false,
-      report,
+    await runBootstrapStep({
+      id: "workspace-snippets",
+      fatal: true,
+      run: async () => {
+        await mergeWorkspaceFiles({
+          manifest,
+          repoRoot,
+          workspace,
+          mergeStrategy: options.merge,
+          heartbeatMode: options.heartbeat,
+          dryRun: options.dryRun ?? false,
+          report,
+        });
+      },
     });
 
-    await upsertCronJobs({
-      cronJobs: manifest.openclaw.cron,
-      dryRun: options.dryRun ?? false,
-      report,
+    await runBootstrapStep({
+      id: "cron-sync",
+      fatal: true,
+      run: async () => {
+        await upsertCronJobs({
+          cronJobs: manifest.openclaw.cron,
+          dryRun: options.dryRun ?? false,
+          report,
+        });
+      },
     });
 
     if (!options.dryRun) {
@@ -343,34 +518,103 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
         resolvedRuntimeEnv,
         loadRepoEnv(repoRoot)
       );
-      await runWebScript("db:init", repoRoot, shellEnv);
-      if (manifest.modes[options.mode].seedDemoData) {
-        await runWebScript("seed", repoRoot, shellEnv);
-      }
-      await writeLastBootstrapState(repoRoot, {
-        workspace,
-        mode: options.mode,
-        openclawProfile: report.openclawProfile,
-        openclawContext: {
-          profile: context.profile,
-          dev: context.dev === true,
-        },
-        updatedAt: new Date().toISOString(),
-      });
-      await withTemporaryShellIfNeeded({
-        repoRoot,
-        runtimeEnv: resolvedRuntimeEnv,
-        openclawProfile: getOpenClawContextKey(context),
+
+      await runBootstrapStep({
+        id: "db-init",
+        fatal: true,
         run: async () => {
-          await runVerifyInternal({
-            full: true,
-            report,
+          await runWebScript("db:init", repoRoot, shellEnv);
+          if (manifest.modes[options.mode].seedDemoData) {
+            await runWebScript("seed", repoRoot, shellEnv);
+          }
+          await writeLastBootstrapState(repoRoot, {
             workspace,
-            runtimeEnv: resolvedRuntimeEnv,
+            mode: options.mode,
+            openclawProfile: report.openclawProfile,
+            openclawContext: {
+              profile: context.profile,
+              dev: context.dev === true,
+            },
+            updatedAt: new Date().toISOString(),
           });
         },
       });
+
+      await runBootstrapStep({
+        id: "verify",
+        fatal: true,
+        run: async () => {
+          verifyReport = createVerifyReport({
+            workspace,
+          });
+          verifyReport.openclawProfile = report.openclawProfile;
+          verifyReport.preflight = preflight;
+          verifyReport.runtimeEnv = summarizeRuntimeEnv(resolvedRuntimeEnv);
+
+          await withTemporaryShellIfNeeded({
+            repoRoot,
+            runtimeEnv: resolvedRuntimeEnv,
+            openclawProfile: getOpenClawContextKey(context),
+            run: async () => {
+              await runVerifyInternal({
+                full: true,
+                agentSmoke: "off",
+                report: verifyReport!,
+                workspace,
+                runtimeEnv: resolvedRuntimeEnv,
+              });
+            },
+          });
+
+          verifyReportPaths = await writeVerifyReport(workspace, verifyReport);
+          await writeCurrentStatus({
+            workspace,
+            repoRoot,
+            patch: {
+              verify: {
+                ok: verifyReport.summary?.ok ?? true,
+                finishedAt: verifyReport.finishedAt,
+                reportJson: verifyReportPaths.jsonPath,
+                reportMd: verifyReportPaths.mdPath,
+                failedKinds: verifyReport.summary?.failedKinds ?? [],
+              },
+            },
+          });
+        },
+      });
+
+      if (checkpoint) {
+        checkpoint.finishedAt = new Date().toISOString();
+        await writeBootstrapCheckpoint(workspace, checkpoint);
+      }
       await writeInstallReport(workspace, report);
+      const recordedVerifyReportPaths = verifyReportPaths as
+        | {
+            jsonPath: string;
+            mdPath: string;
+          }
+        | null;
+      const verifyReportStatus =
+        recordedVerifyReportPaths == null
+          ? {}
+          : {
+              verifyReportJson: recordedVerifyReportPaths.jsonPath,
+              verifyReportMd: recordedVerifyReportPaths.mdPath,
+            };
+      await writeCurrentStatus({
+        workspace,
+        repoRoot,
+        patch: {
+          bootstrap: {
+            ok: true,
+            finishedAt: report.finishedAt,
+            installReportJson: path.join(workspace, ".chieflane", "install-report.json"),
+            installReportMd: path.join(workspace, ".chieflane", "install-report.md"),
+            ...verifyReportStatus,
+            checkpointJson: bootstrapCheckpointPath(workspace),
+          },
+        },
+      });
     }
 
     return report;
@@ -380,7 +624,38 @@ export async function runBootstrap(rawOptions: RunBootstrapInput) {
       error: error instanceof Error ? error.message : String(error),
     });
     if (!options.dryRun) {
+      if (verifyReport != null) {
+        verifyReport.errors.push({
+          kind: "verify",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        verifyReportPaths = await writeVerifyReport(workspace, verifyReport);
+      }
+      if (checkpoint) {
+        checkpoint.finishedAt = new Date().toISOString();
+        await writeBootstrapCheckpoint(workspace, checkpoint);
+      }
       await writeInstallReport(workspace, report);
+      await writeCurrentStatus({
+        workspace,
+        repoRoot,
+        patch: {
+          bootstrap: {
+            ok: false,
+            finishedAt: report.finishedAt,
+            installReportJson: path.join(workspace, ".chieflane", "install-report.json"),
+            installReportMd: path.join(workspace, ".chieflane", "install-report.md"),
+            error: error instanceof Error ? error.message : String(error),
+            ...(verifyReportPaths == null
+              ? {}
+              : {
+                  verifyReportJson: verifyReportPaths.jsonPath,
+                  verifyReportMd: verifyReportPaths.mdPath,
+                }),
+            checkpointJson: bootstrapCheckpointPath(workspace),
+          },
+        },
+      });
     }
     throw error;
   }

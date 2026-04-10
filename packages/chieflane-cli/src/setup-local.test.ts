@@ -84,6 +84,7 @@ test("runSetupLocal --check returns the preflight plan without bootstrapping", a
   };
 
   try {
+    let recoveryCalled = false;
     const result = await runSetupLocal(
       {
         profile: "chieflane",
@@ -92,6 +93,23 @@ test("runSetupLocal --check returns the preflight plan without bootstrapping", a
       {
         findRepoRoot: () => "/tmp/repo",
         primeOpenClawInvocationContext: () => ({ profile: "chieflane" }),
+        ensureRecoveredSurfaceLaneConfig: async () => {
+          recoveryCalled = true;
+          return {
+            seedShellEnv: {
+              shellApiUrl: runtimeEnv.shellApiUrl,
+              shellInternalApiKey: runtimeEnv.shellInternalApiKey,
+              sources: {
+                shellApiUrl: "default",
+                shellInternalApiKey: "generated",
+              },
+            },
+            recovery: {
+              touched: false,
+              configPath: "/tmp/openclaw.json",
+            },
+          };
+        },
         runPreflight: async () => preflightPlan,
         resolveRuntimeEnv: async () => runtimeEnv,
         runBootstrap: async () => {
@@ -121,6 +139,7 @@ test("runSetupLocal --check returns the preflight plan without bootstrapping", a
     );
 
     assert.equal(bootstrapCalled, false);
+    assert.equal(recoveryCalled, false);
     assert.equal(result, preflightPlan);
     assert.ok(logs.some((entry) => entry.includes("\"plannedPort\": 19021")));
   } finally {

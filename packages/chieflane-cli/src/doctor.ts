@@ -14,6 +14,7 @@ import {
 } from "./report";
 import { runPreflight } from "./preflight";
 import { resolveShellApiUrl } from "./runtime-env";
+import { requestJson } from "./http-client";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -131,11 +132,20 @@ export async function runDoctor(options: { profile?: string; dev?: boolean } = {
         profile: context.profile,
         dev: context.dev,
       });
-      const response = await fetch(getShellHealthUrl(shellApiUrl));
+      const response = await requestJson<Record<string, unknown>>(
+        getShellHealthUrl(shellApiUrl)
+      );
       if (!response.ok) {
-        throw new Error(`Shell health failed (${response.status})`);
+        throw new Error(
+          `Shell health failed (${response.status}): ${response.text || "Empty response"}`
+        );
       }
-      const body = (await response.json()) as Record<string, unknown>;
+      if (response.json == null) {
+        throw new Error(
+          `Shell health returned a non-JSON body: ${response.parseError ?? response.text}`
+        );
+      }
+      const body = response.json;
       return {
         ...body,
         shellApiUrl,

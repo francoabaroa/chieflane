@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { PassThrough } from "node:stream";
 import fs from "fs-extra";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  buildShellApiUrl,
   buildShellChildEnv,
   buildRuntimeFingerprint,
   getShellHealthUrl,
@@ -113,39 +115,50 @@ test("withTemporaryShellIfNeeded returns immediately when the shell is already h
 });
 
 test("isShellHealthy requires the Chieflane health payload", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = (async () =>
-    ({
-      ok: true,
-      json: async () => ({
-        ok: true,
-        service: "chieflane",
-      }),
-    }) as Response) as typeof fetch;
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, service: "chieflane" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address == null || typeof address === "string") {
+    throw new Error("Server address unavailable");
+  }
 
   try {
-    assert.equal(await isShellHealthy("http://localhost:3000"), true);
+    assert.equal(await isShellHealthy(`http://127.0.0.1:${address.port}`), true);
   } finally {
-    global.fetch = originalFetch;
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
   }
 });
 
 test("isShellHealthy rejects unrelated 200 health endpoints", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = (async () =>
-    ({
-      ok: true,
-      json: async () => ({
-        ok: true,
-        service: "other-app",
-      }),
-    }) as Response) as typeof fetch;
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, service: "other-app" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address == null || typeof address === "string") {
+    throw new Error("Server address unavailable");
+  }
 
   try {
-    assert.equal(await isShellHealthy("http://localhost:3000"), false);
+    assert.equal(await isShellHealthy(`http://127.0.0.1:${address.port}`), false);
   } finally {
-    global.fetch = originalFetch;
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
   }
+});
+
+test("buildShellApiUrl preserves a base path and drops query/hash", () => {
+  assert.equal(
+    buildShellApiUrl("http://localhost:3000/app/?tenant=a#shell", "api/surfaces"),
+    "http://localhost:3000/app/api/surfaces"
+  );
 });
 
 test("withTemporaryShellIfNeeded restarts a managed healthy shell when the runtime env changes", async () => {

@@ -32,6 +32,12 @@ export type ResolvedRuntimeEnv = {
   warnings: string[];
 };
 
+export type ResolvedSeedShellEnv = {
+  shellApiUrl: string;
+  shellInternalApiKey: string;
+  sources: Record<"shellApiUrl" | "shellInternalApiKey", EnvSource>;
+};
+
 export type RuntimeEnvReport = {
   shellApiUrl: { source: EnvSource; value: string };
   shellInternalApiKey: { source: EnvSource; redacted: string };
@@ -420,6 +426,90 @@ export function summarizeRuntimeEnv(env: ResolvedRuntimeEnv): RuntimeEnvReport {
       source: env.sources.gatewayToken,
       redacted: "[REDACTED]",
     },
+  };
+}
+
+export async function resolveSeedShellEnv(
+  options: Pick<
+    ResolveRuntimeEnvOptions,
+    "repoRoot" | "profile" | "dev" | "persistGeneratedValues"
+  >,
+  deps: RuntimeEnvDependencies = defaultDependencies
+): Promise<ResolvedSeedShellEnv> {
+  const { currentEnv, envFile, envLocalFile } = await loadRepoEnvFiles(
+    options.repoRoot,
+    deps
+  );
+  const repoEnv = { ...envFile, ...envLocalFile };
+  const state = await readRuntimeState(options.repoRoot, options, repoEnv, deps);
+
+  const envShellApiUrl = normalizeValue(currentEnv.SHELL_API_URL);
+  const envLocalShellApiUrl = normalizeValue(envLocalFile.SHELL_API_URL);
+  const envFileShellApiUrl = normalizeValue(envFile.SHELL_API_URL);
+  const stateShellApiUrl =
+    typeof state.shellApiUrl === "string" ? normalizeValue(state.shellApiUrl) : null;
+
+  const envShellInternalApiKey = normalizeValue(currentEnv.SHELL_INTERNAL_API_KEY);
+  const envLocalShellInternalApiKey = normalizeValue(
+    envLocalFile.SHELL_INTERNAL_API_KEY
+  );
+  const envFileShellInternalApiKey = normalizeValue(envFile.SHELL_INTERNAL_API_KEY);
+  const stateShellInternalApiKey =
+    typeof state.shellInternalApiKey === "string"
+      ? normalizeValue(state.shellInternalApiKey)
+      : null;
+
+  const shellApiUrl =
+    envShellApiUrl ??
+    envLocalShellApiUrl ??
+    envFileShellApiUrl ??
+    stateShellApiUrl ??
+    DEFAULT_SHELL_API_URL;
+  const shellInternalApiKey =
+    envShellInternalApiKey ??
+    envLocalShellInternalApiKey ??
+    envFileShellInternalApiKey ??
+    stateShellInternalApiKey ??
+    generateSecret(deps);
+
+  const sources: ResolvedSeedShellEnv["sources"] = {
+    shellApiUrl: envShellApiUrl
+      ? "env"
+      : envLocalShellApiUrl
+        ? "env.local"
+        : envFileShellApiUrl
+          ? "env"
+          : stateShellApiUrl
+            ? "state"
+            : "default",
+    shellInternalApiKey: envShellInternalApiKey
+      ? "env"
+      : envLocalShellInternalApiKey
+        ? "env.local"
+        : envFileShellInternalApiKey
+          ? "env"
+          : stateShellInternalApiKey
+            ? "state"
+            : "generated",
+  };
+
+  if (options.persistGeneratedValues !== false) {
+    await writeRuntimeState(
+      options.repoRoot,
+      options,
+      repoEnv,
+      {
+        ...(sources.shellApiUrl !== "env" ? { shellApiUrl } : {}),
+        ...(shellInternalApiKey ? { shellInternalApiKey } : {}),
+      },
+      deps
+    );
+  }
+
+  return {
+    shellApiUrl,
+    shellInternalApiKey,
+    sources,
   };
 }
 

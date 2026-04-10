@@ -19,5 +19,6 @@ coverage/
 skills-lock.json
 apps/web/data/
 .chieflane/runtime/
+.chieflane/current-status.json
 .chieflane/local-state.json
 .chieflane/local-state.*.json

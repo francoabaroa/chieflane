@@ -1,47 +1,19 @@
 import { Type } from "@sinclair/typebox";
+import {
+  surfaceCloseRequestSchema,
+  surfaceEnvelopeSchema,
+  surfacePatchRequestSchema,
+} from "@chieflane/surface-schema";
+import { formatSurfaceValidationError } from "@chieflane/surface-schema/errors";
+import {
+  ActionTB,
+  EntityRefTB,
+  FreshnessTB,
+  SourceRefTB,
+  SurfacePayloadTB,
+} from "@chieflane/surface-schema/typebox";
 
 const PLUGIN_ID = "surface-lane";
-
-const Action = Type.Object({
-  id: Type.String(),
-  kind: Type.Union([
-    Type.Literal("navigate"),
-    Type.Literal("mutation"),
-    Type.Literal("agent"),
-  ]),
-  label: Type.String(),
-  style: Type.Optional(
-    Type.Union([
-      Type.Literal("primary"),
-      Type.Literal("secondary"),
-      Type.Literal("ghost"),
-      Type.Literal("danger"),
-    ])
-  ),
-  route: Type.Optional(Type.String()),
-  surfaceId: Type.Optional(Type.String()),
-  mutation: Type.Optional(Type.String()),
-  actionKey: Type.Optional(Type.String()),
-  input: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-  confirmText: Type.Optional(Type.String()),
-});
-
-const EntityRef = Type.Object({
-  type: Type.String(),
-  id: Type.String(),
-  label: Type.Optional(Type.String()),
-});
-
-const SourceRef = Type.Object({
-  kind: Type.String(),
-  title: Type.String(),
-  href: Type.Optional(Type.String()),
-});
-
-const Freshness = Type.Object({
-  generatedAt: Type.String(),
-  expiresAt: Type.Optional(Type.String()),
-});
 
 const SurfacePublish = Type.Object({
   surfaceKey: Type.String({ description: "Stable key like 'brief:morning:2026-04-08'" }),
@@ -68,16 +40,13 @@ const SurfacePublish = Type.Object({
   title: Type.String({ description: "Surface title" }),
   subtitle: Type.Optional(Type.String()),
   summary: Type.String({ description: "One sentence: why am I seeing this?" }),
-  payload: Type.Object({
-    surfaceType: Type.String({ description: "One of: brief, queue, board, composer, prep, debrief, dossier, profile360, review_packet, digest, timeline, flow_monitor" }),
-    data: Type.Any({ description: "Type-specific data matching the surfaceType" }),
-  }),
-  actions: Type.Optional(Type.Array(Action, { description: "1–5 user actions" })),
+  payload: SurfacePayloadTB,
+  actions: Type.Optional(Type.Array(ActionTB, { description: "1–5 user actions" })),
   blocks: Type.Optional(Type.Any({ description: "json-render spec for generative interior blocks" })),
   fallbackText: Type.String({ description: "Plain text summary for chat channels" }),
-  entityRefs: Type.Optional(Type.Array(EntityRef)),
-  sourceRefs: Type.Optional(Type.Array(SourceRef)),
-  freshness: Freshness,
+  entityRefs: Type.Optional(Type.Array(EntityRefTB)),
+  sourceRefs: Type.Optional(Type.Array(SourceRefTB)),
+  freshness: FreshnessTB,
   meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 });
 
@@ -89,13 +58,13 @@ const SurfacePatch = Type.Object({
     title: Type.Optional(Type.String()),
     subtitle: Type.Optional(Type.String()),
     summary: Type.Optional(Type.String()),
-    payload: Type.Optional(Type.Any()),
-    actions: Type.Optional(Type.Array(Action)),
+    payload: Type.Optional(SurfacePayloadTB),
+    actions: Type.Optional(Type.Array(ActionTB)),
     blocks: Type.Optional(Type.Any()),
     fallbackText: Type.Optional(Type.String()),
-    entityRefs: Type.Optional(Type.Array(EntityRef)),
-    sourceRefs: Type.Optional(Type.Array(SourceRef)),
-    freshness: Type.Optional(Freshness),
+    entityRefs: Type.Optional(Type.Array(EntityRefTB)),
+    sourceRefs: Type.Optional(Type.Array(SourceRefTB)),
+    freshness: Type.Optional(FreshnessTB),
     meta: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   }, { description: "Fields to update" }),
 });
@@ -181,6 +150,16 @@ export const pluginEntry = {
           "Create or replace a persistent shell surface for work that should be reviewed, tracked, or acted upon later. Use for multi-step work, approval-driven tasks, meeting prep, drafts, dossiers, task boards, and digests.",
         parameters: SurfacePublish,
         async execute(_id: string, params: unknown) {
+          const parsed = surfaceEnvelopeSchema.safeParse(params);
+          if (!parsed.success) {
+            throw new Error(
+              formatSurfaceValidationError({
+                tool: "surface_publish",
+                error: parsed.error,
+                input: params,
+              })
+            );
+          }
           const result = await post(api, "/api/internal/surfaces/publish", params);
           return {
             content: [
@@ -202,6 +181,16 @@ export const pluginEntry = {
           "Patch an existing shell surface by surfaceKey. Use to update status, priority, data, or actions without replacing the whole surface.",
         parameters: SurfacePatch,
         async execute(_id: string, params: unknown) {
+          const parsed = surfacePatchRequestSchema.safeParse(params);
+          if (!parsed.success) {
+            throw new Error(
+              formatSurfaceValidationError({
+                tool: "surface_patch",
+                error: parsed.error,
+                input: params,
+              })
+            );
+          }
           const result = await post(api, "/api/internal/surfaces/patch", params);
           return {
             content: [
@@ -223,6 +212,10 @@ export const pluginEntry = {
           "Close or archive a shell surface. Use when work is complete and the surface no longer needs attention.",
         parameters: SurfaceClose,
         async execute(_id: string, params: unknown) {
+          const parsed = surfaceCloseRequestSchema.safeParse(params);
+          if (!parsed.success) {
+            throw new Error(parsed.error.issues[0]?.message ?? "Invalid surface_close payload");
+          }
           await post(api, "/api/internal/surfaces/close", params);
           return {
             content: [

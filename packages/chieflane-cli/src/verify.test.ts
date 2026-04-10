@@ -3,7 +3,7 @@ import fs from "fs-extra";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createInstallReport } from "./report";
+import { createVerifyReport } from "./report";
 import type { ResolvedRuntimeEnv } from "./runtime-env";
 import {
   getMissingSkillsForVerification,
@@ -141,7 +141,7 @@ test("runVerify auto-starts a temporary shell when ensure-shell is auto", async 
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => {
@@ -160,6 +160,53 @@ test("runVerify auto-starts a temporary shell when ensure-shell is auto", async 
   assert.equal(verifyCalled, true);
 });
 
+test("runVerify marks wrapper failures unhealthy before writing status", async () => {
+  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-verify-"));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "chieflane-workspace-"));
+
+  try {
+    await assert.rejects(
+      () =>
+        runVerify(
+          {
+            workspace,
+            ensureShell: "auto",
+          },
+          {
+            findRepoRoot: () => repoRoot,
+            resolveVerifyWorkspace: async () => workspace,
+            createVerifyReport,
+            runPreflight: async () => preflightPlan,
+            resolveRuntimeEnv: async () => runtimeEnv,
+            withTemporaryShellIfNeeded: async () => {
+              throw new Error("temporary shell failed");
+            },
+            runVerifyInternal: async () => {
+              throw new Error("should not run");
+            },
+            primeOpenClawInvocationContext: () => ({}),
+          }
+        ),
+      /temporary shell failed/
+    );
+
+    const status = (await fs.readJson(
+      path.join(repoRoot, ".chieflane", "current-status.json")
+    )) as { verify?: { ok?: boolean; failedKinds?: string[] } };
+    const report = (await fs.readJson(
+      path.join(workspace, ".chieflane", "verify-report.json")
+    )) as { summary?: { ok?: boolean; failedKinds?: string[] } };
+
+    assert.equal(status.verify?.ok, false);
+    assert.deepEqual(status.verify?.failedKinds, ["verify"]);
+    assert.equal(report.summary?.ok, false);
+    assert.deepEqual(report.summary?.failedKinds, ["verify"]);
+  } finally {
+    await fs.remove(repoRoot);
+    await fs.remove(workspace);
+  }
+});
+
 test("runVerify skips shell auto-start when ensure-shell is never", async () => {
   let autoStartCalled = false;
   let verifyCalled = false;
@@ -173,7 +220,7 @@ test("runVerify skips shell auto-start when ensure-shell is never", async () => 
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => {
@@ -203,7 +250,7 @@ test("runVerify skips auto-start for remote shell URLs and still runs verificati
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
@@ -234,7 +281,7 @@ test("runVerify records the selected profile in the report", async () => {
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => runtimeEnv,
       withTemporaryShellIfNeeded: async ({ run }) => run(),
@@ -258,7 +305,7 @@ test("runVerify does not require SHELL_INTERNAL_API_KEY when the shell does not 
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
@@ -292,7 +339,7 @@ test("runVerify skips shell auto-start when no internal API key is available", a
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async () => ({
         ...runtimeEnv,
@@ -328,7 +375,7 @@ test("runVerify respects an env-backed profile before workspace resolution", asy
     {
       findRepoRoot: () => "/tmp/repo",
       resolveVerifyWorkspace: async () => "/tmp/workspace",
-      createInstallReport,
+      createVerifyReport,
       runPreflight: async () => preflightPlan,
       resolveRuntimeEnv: async (_options) => {
         capturedProfile = _options.profile;

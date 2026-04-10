@@ -1,5 +1,6 @@
 import { execa } from "execa";
 import { getShellHealthUrl } from "./local-shell";
+import { requestJson, requestText } from "./http-client";
 
 type BrowserHealthPayload = {
   ok?: unknown;
@@ -25,9 +26,9 @@ export async function openBrowser(url: string) {
 }
 
 export async function browserCheck(url: string) {
-  const root = await fetch(url);
-  const health = await fetch(getShellHealthUrl(url));
-  const healthBody = (await health.json().catch(() => null)) as BrowserHealthPayload | null;
+  const root = await requestText(url, { followRedirects: true });
+  const health = await requestJson<BrowserHealthPayload>(getShellHealthUrl(url));
+  const healthBody = health.json ?? null;
   const healthPayloadOk =
     healthBody?.ok === true && healthBody?.service === "chieflane";
 

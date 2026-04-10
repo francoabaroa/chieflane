@@ -6,6 +6,7 @@ import fsExtra from "fs-extra";
 import { execa } from "execa";
 import { loadRepoEnv } from "./openclaw";
 import type { ResolvedRuntimeEnv } from "./runtime-env";
+import { requestJson } from "./http-client";
 
 type ShellChild = {
   pid?: number;
@@ -83,6 +84,14 @@ function resolveShellPath(basePathname: string, relativePath: string) {
   return new URL(relativePath, `http://placeholder${normalizedBase}`).pathname;
 }
 
+export function buildShellApiUrl(shellApiUrl: string, relativePath: string) {
+  const parsed = new URL(shellApiUrl);
+  parsed.search = "";
+  parsed.hash = "";
+  parsed.pathname = resolveShellPath(parsed.pathname, relativePath);
+  return parsed.toString();
+}
+
 function normalizeHost(host: string) {
   return host.replace(/^\[(.*)\]$/, "$1");
 }
@@ -128,11 +137,7 @@ function shellDevArgs(shellApiUrl: string) {
 }
 
 export function getShellHealthUrl(shellApiUrl: string) {
-  const parsed = new URL(shellApiUrl);
-  parsed.search = "";
-  parsed.hash = "";
-  parsed.pathname = resolveShellPath(parsed.pathname, "api/health");
-  return parsed.toString();
+  return buildShellApiUrl(shellApiUrl, "api/health");
 }
 
 export function isLocalShellUrl(shellApiUrl: string) {
@@ -174,14 +179,14 @@ function getAutoStartableLocalShellUrlError(shellApiUrl: string) {
 
 export async function isShellHealthy(shellApiUrl: string) {
   try {
-    const response = await fetch(getShellHealthUrl(shellApiUrl));
+    const response = await requestJson<{ ok?: unknown; service?: unknown }>(
+      getShellHealthUrl(shellApiUrl)
+    );
     if (!response.ok) {
       return false;
     }
 
-    const body = (await response.json().catch(() => null)) as
-      | { ok?: unknown; service?: unknown }
-      | null;
+    const body = response.json ?? null;
     return body?.ok === true && body.service === "chieflane";
   } catch {
     return false;
@@ -326,6 +331,31 @@ async function safeWaitForShell(
   deps: LocalShellDependencies
 ) {
   return deps.waitForShell(shellApiUrl, 60_000);
+}
+
+async function stopChildGracefully(
+  child: ShellChild,
+  wait: (ms: number) => Promise<void>
+) {
+  let settled = false;
+  const onExit = child.catch(() => undefined).then(() => {
+    settled = true;
+  });
+
+  child.kill("SIGINT");
+  await Promise.race([onExit, wait(4_000)]);
+  if (settled) {
+    return;
+  }
+
+  child.kill("SIGTERM");
+  await Promise.race([onExit, wait(3_000)]);
+  if (settled) {
+    return;
+  }
+
+  child.kill("SIGKILL");
+  await onExit;
 }
 
 async function writePersistentShellState(
@@ -525,8 +555,7 @@ export async function withTemporaryShellIfNeeded<T>(
       output ? `${message}\n\nTemporary shell output:\n${output}` : message
     );
   } finally {
-    child.kill("SIGINT");
-    await child.catch(() => undefined);
+    await stopChildGracefully(child, deps.wait);
   }
 }
 

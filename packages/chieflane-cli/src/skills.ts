@@ -1,5 +1,6 @@
 import fs from "fs-extra";
 import path from "node:path";
+import { renderChiefShellSkillMarkdown } from "@chieflane/surface-schema/agent-docs";
 import type { IntegrationManifest } from "./manifest";
 import { createBackup, type InstallReport } from "./report";
 
@@ -119,9 +120,17 @@ export async function installSkillsIntoWorkspace(opts: {
       skill
     );
     const targetExists = await fs.pathExists(target);
+    const generatedSkillContent =
+      skill.slug === "chief-shell" ? renderChiefShellSkillMarkdown() : null;
 
     if (targetExists && opts.mergeStrategy !== "force") {
-      if (await filesMatch(source, target)) {
+      const alreadyCurrent =
+        generatedSkillContent == null
+          ? await filesMatch(source, target)
+          : (await fs.readFile(path.join(target, "SKILL.md"), "utf8").catch(() => null)) ===
+            generatedSkillContent;
+
+      if (alreadyCurrent) {
         opts.report.skipped.push({
           kind: "skill",
           slug: skill.slug,
@@ -149,10 +158,19 @@ export async function installSkillsIntoWorkspace(opts: {
         });
       }
       await fs.ensureDir(path.dirname(target));
-      await fs.copy(source, target, {
-        overwrite: true,
-        errorOnExist: false,
-      });
+      if (generatedSkillContent == null) {
+        await fs.copy(source, target, {
+          overwrite: true,
+          errorOnExist: false,
+        });
+      } else {
+        await fs.ensureDir(target);
+        await fs.writeFile(
+          path.join(target, "SKILL.md"),
+          `${generatedSkillContent}\n`,
+          "utf8"
+        );
+      }
     }
 
     opts.report.changed.push({

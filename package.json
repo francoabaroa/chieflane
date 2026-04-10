@@ -11,6 +11,8 @@
     "preflight": "pnpm --filter @chieflane/cli preflight",
     "bootstrap": "pnpm --filter @chieflane/cli bootstrap",
     "verify": "pnpm --filter @chieflane/cli verify",
+    "sync-cron": "pnpm --filter @chieflane/cli exec tsx src/index.ts sync-cron",
+    "publish-test-surface": "pnpm --filter @chieflane/cli exec tsx src/index.ts publish-test-surface",
     "shell:start": "pnpm --filter @chieflane/cli exec tsx src/index.ts shell-start",
     "shell:stop": "pnpm --filter @chieflane/cli exec tsx src/index.ts shell-stop",
     "shell:status": "pnpm --filter @chieflane/cli exec tsx src/index.ts shell-status",

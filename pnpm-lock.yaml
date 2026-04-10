@@ -104,6 +104,9 @@ importers:
 
   packages/chieflane-cli:
     dependencies:
+      '@chieflane/surface-schema':
+        specifier: workspace:*
+        version: link:../surface-schema
       cac:
         specifier: ^6.7.14
         version: 6.7.14
@@ -116,6 +119,9 @@ importers:
       fs-extra:
         specifier: ^11.2.0
         version: 11.3.4
+      json5:
+        specifier: ^2.2.3
+        version: 2.2.3
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -141,6 +147,9 @@ importers:
 
   packages/openclaw-plugin-surface-lane:
     dependencies:
+      '@chieflane/surface-schema':
+        specifier: workspace:*
+        version: link:../surface-schema
       '@sinclair/typebox':
         specifier: ^0.33.0
         version: 0.33.22
@@ -212,6 +221,9 @@ importers:
 
   packages/surface-schema:
     dependencies:
+      '@sinclair/typebox':
+        specifier: ^0.33.0
+        version: 0.33.22
       zod:
         specifier: ^4.1.12
         version: 4.3.6

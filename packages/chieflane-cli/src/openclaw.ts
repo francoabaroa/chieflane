@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { execa, type Options as ExecaOptions } from "execa";
 import type { InstallReport } from "./report";
 import { isSensitiveConfigPath, redactValue } from "./sensitive";
+import { resolveOpenClawPaths } from "./openclaw-paths";
 
 export type OpenClawRunOptions = ExecaOptions & {
   reject?: boolean;
@@ -16,6 +17,15 @@ export type OpenClawInvocationContext = {
 };
 
 let currentContext: OpenClawInvocationContext = {};
+
+export type ResolvedOpenClawRuntime = {
+  context: OpenClawInvocationContext;
+  profileLabel: string;
+  contextKey: string;
+  isolated: boolean;
+  stateDir: string;
+  configPath: string;
+};
 
 function normalizeProfile(value: string | undefined | null) {
   const trimmed = value?.trim();
@@ -148,6 +158,24 @@ export function primeOpenClawInvocationContext(args: {
   return context;
 }
 
+function buildResolvedOpenClawRuntime(
+  context: OpenClawInvocationContext = currentContext
+): ResolvedOpenClawRuntime {
+  const resolvedContext = resolveOpenClawInvocationContext(context);
+  const paths = resolveOpenClawPaths({
+    context: resolvedContext,
+  });
+
+  return {
+    context: resolvedContext,
+    profileLabel: getOpenClawProfileLabel(resolvedContext),
+    contextKey: getOpenClawContextKey(resolvedContext),
+    isolated: isIsolatedOpenClawContext(resolvedContext),
+    stateDir: paths.stateDir.value,
+    configPath: paths.configPath.value,
+  };
+}
+
 export function setOpenClawInvocationContext(context: OpenClawInvocationContext) {
   if (context.dev && context.profile) {
     throw new Error("Use either --dev or --profile, not both.");
@@ -161,6 +189,12 @@ export function setOpenClawInvocationContext(context: OpenClawInvocationContext)
 
 export function getOpenClawInvocationContext(): OpenClawInvocationContext {
   return { ...currentContext };
+}
+
+export function getResolvedOpenClawRuntime(
+  context: OpenClawInvocationContext = currentContext
+) {
+  return buildResolvedOpenClawRuntime(context);
 }
 
 export function buildOpenClawArgs(
@@ -180,19 +214,44 @@ export function buildOpenClawArgs(
   return [...prefix, ...args];
 }
 
+export function buildForcedOpenClawEnv(
+  runtime: ResolvedOpenClawRuntime
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OPENCLAW_PROFILE:
+      runtime.context.dev === true
+        ? "dev"
+        : runtime.context.profile ?? "default",
+  };
+
+  if (
+    runtime.context.dev === true ||
+    (runtime.context.profile != null && runtime.context.profile !== "default")
+  ) {
+    delete env.OPENCLAW_STATE_DIR;
+    delete env.OPENCLAW_CONFIG_PATH;
+  }
+
+  return env;
+}
+
 export async function runOpenClaw(
   args: string[],
   options: OpenClawRunOptions & OpenClawInvocationContext = {}
 ) {
-  return execa("openclaw", buildOpenClawArgs(args, {
-    ...currentContext,
-    ...resolveOpenClawInvocationContext({
-      profile: options.profile ?? currentContext.profile,
-      dev: options.dev ?? currentContext.dev,
-    }),
-  }), {
+  const effectiveContext = resolveOpenClawInvocationContext({
+    profile: options.profile ?? currentContext.profile,
+    dev: options.dev ?? currentContext.dev,
+  });
+  const runtime = buildResolvedOpenClawRuntime(effectiveContext);
+
+  return execa("openclaw", buildOpenClawArgs(args, runtime.context), {
     cwd: options.cwd ?? process.cwd(),
-    env: options.env,
+    env: {
+      ...buildForcedOpenClawEnv(runtime),
+      ...(options.env ?? {}),
+    },
     reject: options.reject ?? true,
   });
 }

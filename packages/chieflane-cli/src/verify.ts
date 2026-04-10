@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { findRepoRoot } from "./manifest";
 import {
+  buildShellApiUrl,
   getShellHealthUrl,
   isLocalShellUrl,
   withTemporaryShellIfNeeded,
@@ -15,7 +16,13 @@ import {
   resolveWorkspacePath,
   runOpenClaw,
 } from "./openclaw";
-import { createInstallReport, type InstallReport } from "./report";
+import {
+  createVerifyReport,
+  type ReportItem,
+  type VerifyReport,
+  writeCurrentStatus,
+  writeVerifyReport,
+} from "./report";
 import { runPreflight } from "./preflight";
 import {
   resolveRuntimeEnv,
@@ -24,6 +31,9 @@ import {
 } from "./runtime-env";
 import { getWorkspaceSkillCandidates } from "./skills";
 import { readLastBootstrapState } from "./state";
+import { ensureRecoveredSurfaceLaneConfig } from "./plugin-config-recovery";
+import { requestJson } from "./http-client";
+import { invokeGatewayTool, runGatewayResponse } from "./gateway-client";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -54,39 +64,6 @@ export function getMissingSkillsForVerification(args: {
   return Array.from(new Set([...workspaceMissing, ...visibleMissing]));
 }
 
-async function invokeTool(
-  gatewayUrl: string,
-  gatewayToken: string,
-  tool: string,
-  args: Record<string, unknown>
-) {
-  const response = await fetch(`${gatewayUrl}/tools/invoke`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${gatewayToken}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      tool,
-      action: "json",
-      args,
-      sessionKey: "main",
-      dryRun: false,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Tool ${tool} failed (${response.status}): ${await response.text()}`);
-  }
-
-  const body = (await response.json()) as { ok?: boolean; error?: unknown };
-  if (body.ok === false) {
-    throw new Error(`Tool ${tool} returned error: ${JSON.stringify(body.error)}`);
-  }
-
-  return body;
-}
-
 function safeJsonParse<T>(value: string, fallback: T): T {
   try {
     return JSON.parse(value) as T;
@@ -96,9 +73,10 @@ function safeJsonParse<T>(value: string, fallback: T): T {
 }
 
 async function runCheck(
-  report: InstallReport,
+  report: Pick<VerifyReport, "checks" | "errors" | "warnings">,
   kind: string,
-  fn: () => Promise<Record<string, unknown> | void>
+  fn: () => Promise<Record<string, unknown> | void>,
+  severity: "error" | "warning" = "error"
 ) {
   try {
     const details = (await fn()) ?? {};
@@ -114,12 +92,30 @@ async function runCheck(
       ok: false,
       error: errorMessage(error),
     });
-    report.errors.push({
-      kind,
-      error: errorMessage(error),
-    });
+    if (severity === "error") {
+      report.errors.push({
+        kind,
+        error: errorMessage(error),
+      });
+    } else {
+      report.warnings.push({
+        kind,
+        message: errorMessage(error),
+      });
+    }
     return false;
   }
+}
+
+export function formatCheckTable(checks: ReportItem[]) {
+  return checks
+    .map((check) => {
+      const ok = check.ok === true;
+      const kind = String(check.kind ?? "unknown");
+      const error = check.error ? ` - ${String(check.error)}` : "";
+      return `${ok ? "OK" : "FAIL"} ${kind}${ok ? "" : error}`;
+    })
+    .join("\n");
 }
 
 export async function resolveVerifyWorkspace(
@@ -162,6 +158,7 @@ export type VerifyOptions = {
   full?: boolean;
   workspace?: string;
   ensureShell?: "auto" | "never";
+  agentSmoke?: "off" | "warn" | "required";
   profile?: string;
   dev?: boolean;
 };
@@ -169,7 +166,8 @@ export type VerifyOptions = {
 type VerifyDependencies = {
   findRepoRoot: typeof findRepoRoot;
   resolveVerifyWorkspace: typeof resolveVerifyWorkspace;
-  createInstallReport: typeof createInstallReport;
+  createVerifyReport: typeof createVerifyReport;
+  ensureRecoveredSurfaceLaneConfig?: typeof ensureRecoveredSurfaceLaneConfig;
   runPreflight: typeof runPreflight;
   resolveRuntimeEnv: typeof resolveRuntimeEnv;
   withTemporaryShellIfNeeded: typeof withTemporaryShellIfNeeded;
@@ -180,7 +178,8 @@ type VerifyDependencies = {
 const defaultDependencies: VerifyDependencies = {
   findRepoRoot,
   resolveVerifyWorkspace,
-  createInstallReport,
+  createVerifyReport,
+  ensureRecoveredSurfaceLaneConfig,
   runPreflight,
   resolveRuntimeEnv,
   withTemporaryShellIfNeeded,
@@ -198,6 +197,17 @@ export async function runVerify(
     profile: options.profile,
     dev: options.dev === true,
   });
+  const earlyRecovery = {
+    changed: [] as VerifyReport["changed"],
+    warnings: [] as VerifyReport["warnings"],
+  };
+  if (deps.ensureRecoveredSurfaceLaneConfig) {
+    await deps.ensureRecoveredSurfaceLaneConfig({
+      repoRoot,
+      context,
+      report: earlyRecovery,
+    });
+  }
   const workspace = await deps.resolveVerifyWorkspace(
     repoRoot,
     options.workspace,
@@ -212,12 +222,13 @@ export async function runVerify(
     profile: context.profile,
     dev: context.dev,
   });
-  const report = deps.createInstallReport({
+  const report = deps.createVerifyReport({
     workspace,
-    mode: "live",
   });
   report.openclawProfile = getOpenClawProfileLabel(context);
   report.preflight = preflight;
+  report.changed.push(...earlyRecovery.changed);
+  report.warnings.push(...earlyRecovery.warnings);
 
   const runtimeEnv = await deps.resolveRuntimeEnv({
     repoRoot,
@@ -239,32 +250,83 @@ export async function runVerify(
   const runner = async () =>
     deps.runVerifyInternal({
       full: options.full === true,
+      agentSmoke: options.agentSmoke ?? "warn",
       report,
       workspace,
       runtimeEnv,
     });
 
-  if (options.ensureShell === "never") {
-    await runner();
-  } else if (!runtimeEnv.shellInternalApiKey) {
-    await runner();
-  } else if (!isLocalShellUrl(runtimeEnv.shellApiUrl)) {
-    await runner();
-  } else {
-    await deps.withTemporaryShellIfNeeded({
-      repoRoot,
-      runtimeEnv,
-      openclawProfile: getOpenClawContextKey(context),
-      run: runner,
+  let failure: unknown = null;
+
+  try {
+    if (options.ensureShell === "never") {
+      await runner();
+    } else if (!runtimeEnv.shellInternalApiKey) {
+      await runner();
+    } else if (!isLocalShellUrl(runtimeEnv.shellApiUrl)) {
+      await runner();
+    } else {
+      await deps.withTemporaryShellIfNeeded({
+        repoRoot,
+        runtimeEnv,
+        openclawProfile: getOpenClawContextKey(context),
+        run: runner,
+      });
+    }
+  } catch (error) {
+    failure = error;
+  }
+
+  if (failure != null && report.errors.length === 0) {
+    const message = errorMessage(failure);
+    report.checks.push({
+      kind: "verify",
+      ok: false,
+      error: message,
+    });
+    report.errors.push({
+      kind: "verify",
+      error: message,
     });
   }
 
-  return report;
+  const paths = await writeVerifyReport(workspace, report);
+  await writeCurrentStatus({
+    workspace,
+    repoRoot,
+    patch: {
+      verify: {
+        ok: report.summary?.ok ?? failure == null,
+        finishedAt: report.finishedAt,
+        reportJson: paths.jsonPath,
+        reportMd: paths.mdPath,
+        failedKinds: report.summary?.failedKinds ?? [],
+      },
+    },
+  });
+
+  if (failure == null) {
+    console.log(formatCheckTable(report.checks));
+    console.log("Verification succeeded.");
+    console.log(`Verify report: ${paths.jsonPath}`);
+    return report;
+  }
+
+  const failed = report.checks.find((check) => check.ok === false);
+  const headline = failed
+    ? `Verification failed at ${String(failed.kind)}: ${String(failed.error)}`
+    : `Verification failed: ${errorMessage(failure)}`;
+
+  console.error(formatCheckTable(report.checks));
+  console.error(headline);
+  console.error(`Verify report: ${paths.jsonPath}`);
+  throw failure;
 }
 
 export async function runVerifyInternal(args: {
   full: boolean;
-  report: InstallReport;
+  agentSmoke: "off" | "warn" | "required";
+  report: Pick<VerifyReport, "checks" | "errors" | "warnings">;
   workspace: string;
   runtimeEnv: ResolvedRuntimeEnv;
 }) {
@@ -284,21 +346,26 @@ export async function runVerifyInternal(args: {
 
   hasFailures =
     !(await runCheck(args.report, "gateway-status", async () => {
-      const result = await runOpenClaw(["gateway", "status"]);
+      const result = await runOpenClaw(["gateway", "status", "--json", "--deep"], {
+        reject: false,
+      });
+      if (result.exitCode !== 0) {
+        throw new Error(
+          result.stderr || result.stdout || "openclaw gateway status failed"
+        );
+      }
       return { stdout: result.stdout.trim() };
     })) || hasFailures;
 
   hasFailures =
-    !(await runCheck(args.report, "doctor", async () => {
-      const result = await runOpenClaw(["doctor", "--json"], {
+    !(await runCheck(args.report, "config-validate", async () => {
+      const result = await runOpenClaw(["config", "validate", "--json"], {
         reject: false,
       });
       if (result.exitCode !== 0) {
-        const fallback = await runOpenClaw(["doctor"], { reject: false });
-        if (fallback.exitCode !== 0) {
-          throw new Error(fallback.stderr || fallback.stdout || "openclaw doctor failed");
-        }
-        return { stdout: fallback.stdout.trim() };
+        throw new Error(
+          result.stderr || result.stdout || "openclaw config validate failed"
+        );
       }
       return { stdout: result.stdout.trim() };
     })) || hasFailures;
@@ -373,12 +440,20 @@ export async function runVerifyInternal(args: {
 
   hasFailures =
     !(await runCheck(args.report, "shell-health", async () => {
-      const response = await fetch(getShellHealthUrl(shellApiUrl));
+      const response = await requestJson<Record<string, unknown>>(
+        getShellHealthUrl(shellApiUrl)
+      );
       if (!response.ok) {
         throw new Error(`Shell health failed (${response.status})`);
       }
 
-      const body = (await response.json()) as Record<string, unknown>;
+      if (response.json == null) {
+        throw new Error(
+          `Shell health returned a non-JSON body: ${response.parseError ?? response.text}`
+        );
+      }
+
+      const body = response.json;
       if (body.ok !== true) {
         throw new Error(`Shell health returned not ok: ${JSON.stringify(body)}`);
       }
@@ -391,7 +466,7 @@ export async function runVerifyInternal(args: {
 
     hasFailures =
       !(await runCheck(args.report, "tool-roundtrip", async () => {
-        await invokeTool(gatewayUrl, gatewayToken, "surface_publish", {
+        await invokeGatewayTool(gatewayUrl, gatewayToken, "surface_publish", {
           surfaceKey,
           lane: "ops",
           status: "ready",
@@ -418,7 +493,7 @@ export async function runVerifyInternal(args: {
           },
         });
 
-        await invokeTool(gatewayUrl, gatewayToken, "surface_patch", {
+        await invokeGatewayTool(gatewayUrl, gatewayToken, "surface_patch", {
           surfaceKey,
           patch: {
             status: "done",
@@ -426,7 +501,7 @@ export async function runVerifyInternal(args: {
           },
         });
 
-        await invokeTool(gatewayUrl, gatewayToken, "surface_close", {
+        await invokeGatewayTool(gatewayUrl, gatewayToken, "surface_close", {
           surfaceKey,
           finalStatus: "archived",
         });
@@ -436,6 +511,58 @@ export async function runVerifyInternal(args: {
           surfaceKey,
         };
       })) || hasFailures;
+  }
+
+  if (args.agentSmoke !== "off") {
+    const surfaceKey = `verify:agent-smoke:${Date.now()}`;
+    const smokeSucceeded = await runCheck(
+      args.report,
+      "agent-smoke",
+      async () => {
+        await runGatewayResponse({
+          gatewayUrl,
+          gatewayToken,
+          user: `verify-agent-smoke:${Date.now()}`,
+          instructions: [
+            "Use the installed Chieflane workspace docs and chief-shell skill.",
+            "Call surface_publish exactly once.",
+            "Publish one minimal valid brief surface.",
+            `Use surfaceKey \"${surfaceKey}\".`,
+            "Do not explain the schema in prose.",
+          ].join("\n"),
+          input: "Create one minimal Chieflane brief surface for smoke testing.",
+        });
+
+        try {
+          const lookup = args.runtimeEnv.shellInternalApiKey
+            ? await requestJson<Record<string, unknown>>(
+                `${buildShellApiUrl(shellApiUrl, "api/internal/surfaces/by-key")}?surfaceKey=${encodeURIComponent(surfaceKey)}`,
+                {
+                  headers: {
+                    authorization: `Bearer ${args.runtimeEnv.shellInternalApiKey}`,
+                  },
+                }
+              )
+            : await requestJson<Record<string, unknown>>(
+                `${buildShellApiUrl(shellApiUrl, "api/surfaces")}?surfaceKey=${encodeURIComponent(surfaceKey)}`
+              );
+          if (!lookup.ok) {
+            throw new Error(
+              `Agent smoke did not produce a visible shell surface (${lookup.status}): ${lookup.text || "Empty response"}`
+            );
+          }
+          return { surfaceKey };
+        } finally {
+          await invokeGatewayTool(gatewayUrl, gatewayToken, "surface_close", {
+            surfaceKey,
+            finalStatus: "archived",
+          }).catch(() => undefined);
+        }
+      },
+      args.agentSmoke === "required" ? "error" : "warning"
+    );
+    hasFailures =
+      (!smokeSucceeded && args.agentSmoke === "required") || hasFailures;
   }
 
   if (hasFailures) {

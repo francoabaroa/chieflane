@@ -1,5 +1,9 @@
 import fs from "fs-extra";
 import path from "node:path";
+import {
+  renderAgentsSurfaceLifecycleMarkdown,
+  renderToolsSurfaceContractMarkdown,
+} from "@chieflane/surface-schema/agent-docs";
 import type { IntegrationManifest, ManifestSnippet } from "./manifest";
 import { createBackup, type InstallReport } from "./report";
 
@@ -89,6 +93,18 @@ async function readText(filePath: string) {
 
 async function readTemplate(repoRoot: string, relativePath: string) {
   return readText(path.resolve(repoRoot, relativePath));
+}
+
+function renderManagedSnippet(targetName: string) {
+  if (targetName === "AGENTS.md") {
+    return renderAgentsSurfaceLifecycleMarkdown();
+  }
+
+  if (targetName === "TOOLS.md") {
+    return renderToolsSurfaceContractMarkdown();
+  }
+
+  return null;
 }
 
 async function writeWorkspaceFile(args: {
@@ -233,7 +249,9 @@ async function mergeAgentsAndTools(opts: MergeOptions) {
       continue;
     }
 
-    const body = await readTemplate(opts.repoRoot, snippet.source);
+    const body =
+      renderManagedSnippet(targetName) ??
+      (await readTemplate(opts.repoRoot, snippet.source));
     await upsertSnippet({
       workspace: opts.workspace,
       targetPath: path.join(opts.workspace, targetName),

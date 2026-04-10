@@ -69,7 +69,7 @@ export function LaneSurfaceView({
   return (
     <div>
       {surfaces.length === 0 ? (
-        <SurfaceList surfaces={surfaces} emptyMessage={emptyMessage} />
+        <SurfaceList surfaces={surfaces} emptyMessage={emptyMessage} lane={lane} />
       ) : (
         <div className="md:grid md:grid-cols-[360px_1fr]">
           <div className="md:overflow-y-auto md:max-h-[calc(100dvh-73px)] md:border-r md:border-border">
@@ -79,6 +79,7 @@ export function LaneSurfaceView({
               selectedSurfaceId={selectedSurface?.id}
               onSelectSurface={handleSelectSurface}
               laneRoute={pathname}
+              lane={lane}
             />
           </div>
 

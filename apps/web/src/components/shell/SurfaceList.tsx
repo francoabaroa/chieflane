@@ -1,6 +1,7 @@
 "use client";
 
 import type { StoredSurface } from "@chieflane/surface-schema";
+import { FirstRunEmptyState } from "@/components/FirstRunEmptyState";
 import { SurfaceCard } from "./SurfaceCard";
 
 export function SurfaceList({
@@ -9,23 +10,21 @@ export function SurfaceList({
   selectedSurfaceId,
   onSelectSurface,
   laneRoute,
+  lane,
 }: {
   surfaces: StoredSurface[];
   emptyMessage?: string;
   selectedSurfaceId?: string | null;
   onSelectSurface?: (surfaceId: string) => void;
   laneRoute?: string;
+  lane?: string;
 }) {
   if (!surfaces.length) {
     return (
-      <div className="flex flex-col items-start px-4 py-16 md:py-20 animate-fade-in">
-        <p className="text-[0.875rem] text-text-secondary font-medium">
-          {emptyMessage ?? "No surfaces yet"}
-        </p>
-        <p className="text-[0.75rem] text-text-tertiary mt-1 max-w-[40ch] leading-relaxed">
-          Surfaces appear here when your agent publishes work.
-        </p>
-      </div>
+      <FirstRunEmptyState
+        lane={lane ?? "today"}
+        fallbackMessage={emptyMessage ?? "No surfaces yet"}
+      />
     );
   }
 

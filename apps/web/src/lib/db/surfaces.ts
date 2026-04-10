@@ -402,6 +402,11 @@ export function getSurfaceById(id: string): StoredSurface | null {
   return byKey ? rowToSurface(byKey) : null;
 }
 
+export function getSurfaceByKey(surfaceKey: string): StoredSurface | null {
+  const row = getSurfaceRowByKey(surfaceKey);
+  return row ? rowToSurface(row) : null;
+}
+
 export function getAllSurfaces(): StoredSurface[] {
   const db = getDb();
   const rows = db
@@ -412,4 +417,20 @@ export function getAllSurfaces(): StoredSurface[] {
     )
     .all() as Row[];
   return rows.map(rowToSurface);
+}
+
+export function getTotalSurfaceCount() {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT COUNT(*) AS count FROM surfaces")
+    .get() as { count?: number } | undefined;
+  return row?.count ?? 0;
+}
+
+export function getUserSurfaceCount() {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT COUNT(*) AS count FROM surfaces WHERE surface_key NOT LIKE 'verify:%'")
+    .get() as { count?: number } | undefined;
+  return row?.count ?? 0;
 }

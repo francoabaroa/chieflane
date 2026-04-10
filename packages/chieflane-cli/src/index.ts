@@ -3,6 +3,8 @@ import { runBootstrap } from "./bootstrap";
 import { runDoctor } from "./doctor";
 import { runPreflightCommand } from "./preflight";
 import { runSetupLocal } from "./setup-local";
+import { runSyncCron } from "./cron";
+import { runPublishTestSurface } from "./publish-test-surface";
 import {
   runShellStart,
   runShellStatus,
@@ -44,6 +46,8 @@ commonOpenClawOptions(
     default: "path",
   })
   .option("--dry-run", "Preview changes without writing", { default: false })
+  .option("--resume", "Resume from the last successful checkpoint", { default: false })
+  .option("--from-step <id>", "Resume starting from a specific bootstrap step")
   .action(runBootstrap);
 
 commonOpenClawOptions(
@@ -56,6 +60,7 @@ commonOpenClawOptions(
     default: "auto",
   })
   .option("--ensure-shell <mode>", "auto | never", { default: "auto" })
+  .option("--agent-smoke <mode>", "off | warn | required", { default: "warn" })
   .action(runVerify);
 
 commonOpenClawOptions(
@@ -102,6 +107,24 @@ commonOpenClawOptions(
 commonOpenClawOptions(
   cli.command("doctor", "Collect diagnostics")
 ).action(runDoctor);
+
+commonOpenClawOptions(
+  cli.command("sync-cron", "Sync only Chieflane cron jobs")
+).action(runSyncCron);
+
+commonOpenClawOptions(
+  cli.command(
+    "publish-test-surface",
+    "Publish a visible demo surface into Chieflane"
+  )
+)
+  .option(
+    "--lane <lane>",
+    "today | inbox | meetings | drafts | people | research | ops",
+    { default: "today" }
+  )
+  .option("--open", "Open the shell after publishing", { default: false })
+  .action(runPublishTestSurface);
 
 cli.help();
 cli.parse(process.argv.filter((value) => value !== "--"));

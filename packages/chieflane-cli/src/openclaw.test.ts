@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  buildForcedOpenClawEnv,
   buildOpenClawArgs,
   defaultWorkspacePath,
   getOpenClawContextKey,
@@ -196,5 +197,71 @@ test("primeOpenClawInvocationContext rejects --dev with --profile before resolvi
   } finally {
     setOpenClawInvocationContext({});
     await fs.remove(repoRoot);
+  }
+});
+
+test("buildForcedOpenClawEnv drops ambient OPENCLAW paths for isolated contexts", () => {
+  const previousStateDir = process.env.OPENCLAW_STATE_DIR;
+  const previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
+  process.env.OPENCLAW_STATE_DIR = "/tmp/ambient-state";
+  process.env.OPENCLAW_CONFIG_PATH = "/tmp/ambient-config.json";
+
+  try {
+    const env = buildForcedOpenClawEnv({
+      context: { profile: "chieflane" },
+      profileLabel: "chieflane",
+      contextKey: "chieflane",
+      isolated: true,
+      stateDir: "/tmp/profile-state",
+      configPath: "/tmp/profile-config.json",
+    });
+
+    assert.equal(env.OPENCLAW_PROFILE, "chieflane");
+    assert.equal("OPENCLAW_STATE_DIR" in env, false);
+    assert.equal("OPENCLAW_CONFIG_PATH" in env, false);
+  } finally {
+    if (previousStateDir == null) {
+      delete process.env.OPENCLAW_STATE_DIR;
+    } else {
+      process.env.OPENCLAW_STATE_DIR = previousStateDir;
+    }
+    if (previousConfigPath == null) {
+      delete process.env.OPENCLAW_CONFIG_PATH;
+    } else {
+      process.env.OPENCLAW_CONFIG_PATH = previousConfigPath;
+    }
+  }
+});
+
+test("buildForcedOpenClawEnv preserves ambient paths for an explicit default profile", () => {
+  const previousStateDir = process.env.OPENCLAW_STATE_DIR;
+  const previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
+  process.env.OPENCLAW_STATE_DIR = "/tmp/default-state";
+  process.env.OPENCLAW_CONFIG_PATH = "/tmp/default-config.json";
+
+  try {
+    const env = buildForcedOpenClawEnv({
+      context: { profile: "default" },
+      profileLabel: "default",
+      contextKey: "default",
+      isolated: false,
+      stateDir: "/tmp/default-state",
+      configPath: "/tmp/default-config.json",
+    });
+
+    assert.equal(env.OPENCLAW_PROFILE, "default");
+    assert.equal(env.OPENCLAW_STATE_DIR, "/tmp/default-state");
+    assert.equal(env.OPENCLAW_CONFIG_PATH, "/tmp/default-config.json");
+  } finally {
+    if (previousStateDir == null) {
+      delete process.env.OPENCLAW_STATE_DIR;
+    } else {
+      process.env.OPENCLAW_STATE_DIR = previousStateDir;
+    }
+    if (previousConfigPath == null) {
+      delete process.env.OPENCLAW_CONFIG_PATH;
+    } else {
+      process.env.OPENCLAW_CONFIG_PATH = previousConfigPath;
+    }
   }
 });
