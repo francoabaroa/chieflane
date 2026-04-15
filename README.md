@@ -4,6 +4,20 @@ Chieflane is a local web shell for working with an OpenClaw workspace. It gives 
 
 The setup flow installs the OpenClaw `surface-lane` plugin, adds the Chieflane skills and workspace instructions, verifies that everything is connected, and starts the local shell.
 
+## What It Looks Like Configured
+
+After setup and a published test surface, the local shell looks like this:
+
+![Configured Chieflane shell screenshot 1](screenshots/Screenshot%202026-04-14%20at%208.10.29%E2%80%AFPM.png)
+
+![Configured Chieflane shell screenshot 2](screenshots/Screenshot%202026-04-14%20at%208.10.50%E2%80%AFPM.png)
+
+![Configured Chieflane shell screenshot 3](screenshots/Screenshot%202026-04-14%20at%208.11.09%E2%80%AFPM.png)
+
+![Configured Chieflane shell screenshot 4](screenshots/Screenshot%202026-04-14%20at%208.11.37%E2%80%AFPM.png)
+
+![Configured Chieflane shell screenshot 5](screenshots/Screenshot%202026-04-14%20at%208.11.54%E2%80%AFPM.png)
+
 ## Fastest Zero-Assumption Local Setup
 
 ```bash
@@ -153,20 +167,6 @@ pnpm publish-test-surface -- --dev --open
 ```
 
 Use the same `--profile <name>` or `--dev` flag that you used for setup. The shell also shows a first-run empty state with a `Publish test surface` button when setup is healthy and no non-verification surfaces have been published yet.
-
-### Configured Shell Preview
-
-After setup and a published test surface, the local shell looks like this:
-
-![Configured Chieflane shell screenshot 1](screenshots/Screenshot%202026-04-14%20at%208.10.29%E2%80%AFPM.png)
-
-![Configured Chieflane shell screenshot 2](screenshots/Screenshot%202026-04-14%20at%208.10.50%E2%80%AFPM.png)
-
-![Configured Chieflane shell screenshot 3](screenshots/Screenshot%202026-04-14%20at%208.11.09%E2%80%AFPM.png)
-
-![Configured Chieflane shell screenshot 4](screenshots/Screenshot%202026-04-14%20at%208.11.37%E2%80%AFPM.png)
-
-![Configured Chieflane shell screenshot 5](screenshots/Screenshot%202026-04-14%20at%208.11.54%E2%80%AFPM.png)
 
 ## Local Env Behavior
 
