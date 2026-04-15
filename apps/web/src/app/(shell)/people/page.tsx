@@ -10,10 +10,11 @@ export default function PeoplePage() {
   return (
     <div>
       <LaneHeader
+        lane="people"
         icon="Users"
         title="People"
         description="Contacts and relationships"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="people" initialSurfaces={surfaces} emptyMessage="No active dossiers" />
     </div>

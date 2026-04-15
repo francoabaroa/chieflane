@@ -7,6 +7,17 @@ const ToneTB = Type.Union([
   Type.Literal("critical"),
 ]);
 
+const ActionInputSpecTB = Type.Object({
+  mode: Type.Optional(
+    Type.Union([Type.Literal("text"), Type.Literal("textarea")])
+  ),
+  label: Type.String(),
+  placeholder: Type.Optional(Type.String()),
+  submitLabel: Type.Optional(Type.String()),
+  required: Type.Optional(Type.Boolean()),
+  maxLength: Type.Optional(Type.Integer({ minimum: 1 })),
+});
+
 export const ActionTB = Type.Object({
   id: Type.String(),
   kind: Type.Union([
@@ -28,6 +39,7 @@ export const ActionTB = Type.Object({
   mutation: Type.Optional(Type.String()),
   actionKey: Type.Optional(Type.String()),
   input: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  inputSpec: Type.Optional(ActionInputSpecTB),
   confirmText: Type.Optional(Type.String()),
 });
 

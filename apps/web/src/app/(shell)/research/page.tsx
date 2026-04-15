@@ -10,10 +10,11 @@ export default function ResearchPage() {
   return (
     <div>
       <LaneHeader
+        lane="research"
         icon="BookOpen"
         title="Research"
         description="Deep dives and synthesis"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="research" initialSurfaces={surfaces} emptyMessage="No active research packets" />
     </div>

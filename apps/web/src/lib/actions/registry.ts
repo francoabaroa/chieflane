@@ -33,6 +33,7 @@ function broadcastSurfaceUpdate(surface: StoredSurface) {
     data: {
       lane: surface.lane,
       status: surface.status,
+      surface,
     },
   });
 }
@@ -45,6 +46,7 @@ function broadcastSurfaceClose(surface: StoredSurface) {
     data: {
       lane: surface.lane,
       status: surface.status,
+      surface,
     },
   });
 }
@@ -121,6 +123,38 @@ export const actionRegistry: Record<string, ActionDefinition> = {
     description: "Approve and send a reviewed communication or action.",
     instruction:
       "Complete the approved action, then patch the current surface to reflect the outcome and archive it if it no longer needs attention.",
+  },
+  complete_surface_canonical: {
+    kind: "agent",
+    description:
+      "Mark this task complete in the canonical task system and close the linked surface.",
+    instruction: [
+      "The user completed this work from the Chieflane UI.",
+      "Update the canonical task source if one exists.",
+      "If no external task source exists, update the normal workspace task source or memory.",
+      "Then patch or close this exact surfaceKey.",
+      "Prefer closing the current surface rather than creating duplicates.",
+    ].join("\n"),
+  },
+  message_openclaw_about_surface: {
+    kind: "agent",
+    description:
+      "Send a user note about the current surface to OpenClaw and update the linked workflow.",
+    instruction: [
+      "The user submitted a live note from Chieflane about this surface.",
+      "Use the note to update the canonical workflow or task system.",
+      "Patch this surface or create one follow-up surface only if needed.",
+    ].join("\n"),
+  },
+  mark_blocked_canonical: {
+    kind: "agent",
+    description:
+      "Mark the canonical work item blocked and reflect it in this surface.",
+    instruction: [
+      "The user marked this work item blocked from Chieflane.",
+      "Update the canonical task source if one exists.",
+      "Patch this surface to blocked and add the user note if provided.",
+    ].join("\n"),
   },
   archive_surface: {
     kind: "shell",

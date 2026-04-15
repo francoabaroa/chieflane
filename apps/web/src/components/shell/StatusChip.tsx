@@ -36,9 +36,9 @@ const TONE_CONFIG: Record<string, { dot: string; text: string }> = {
 export function StatusChip({ status }: { status: Status }) {
   const config = STATUS_CONFIG[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 ${config.text}`}>
+    <span className={`inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 ${config.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} aria-hidden="true" />
-      <span className="text-[0.6875rem] font-medium font-[family-name:var(--font-mono)] uppercase tracking-wider">
+      <span className="text-[0.6875rem] font-medium font-[family-name:var(--font-mono)] uppercase tracking-normal">
         {config.label}
       </span>
     </span>
@@ -54,9 +54,9 @@ export function ToneChip({
 }) {
   const config = TONE_CONFIG[tone] ?? TONE_CONFIG.neutral;
   return (
-    <span className={`inline-flex items-center gap-1.5 ${config.text}`}>
+    <span className={`inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 ${config.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} aria-hidden="true" />
-      <span className="text-[0.6875rem] font-medium font-[family-name:var(--font-mono)] uppercase tracking-wider">
+      <span className="text-[0.6875rem] font-medium font-[family-name:var(--font-mono)] uppercase tracking-normal">
         {label}
       </span>
     </span>

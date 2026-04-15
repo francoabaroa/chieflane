@@ -10,10 +10,11 @@ export default function TodayPage() {
   return (
     <div>
       <LaneHeader
+        lane="today"
         icon="Zap"
         title="Today"
         description="Your daily command center"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="today" initialSurfaces={surfaces} emptyMessage="Your day is clear" />
     </div>

@@ -6,11 +6,13 @@ import type { StoredSurface } from "@chieflane/surface-schema";
 import { useStream } from "@/hooks/useStream";
 import { SurfaceDetailShell } from "@/components/shell/SurfaceDetailShell";
 import { useSurfaceStore } from "@/lib/client/surface-store";
+import { useActionProgressStore } from "@/lib/client/action-progress-store";
 
 export function SurfaceDetailView({ surface }: { surface: StoredSurface }) {
   const router = useRouter();
   const upsertSurface = useSurfaceStore((state) => state.upsertSurface);
   const removeSurface = useSurfaceStore((state) => state.removeSurface);
+  const setActionProgress = useActionProgressStore((state) => state.setProgress);
   const cachedSurface = useSurfaceStore(
     (state) => state.surfacesById[surface.id] ?? surface
   );
@@ -25,6 +27,7 @@ export function SurfaceDetailView({ surface }: { surface: StoredSurface }) {
     }
 
     if (event.type === "action.progress") {
+      setActionProgress(event.surfaceId, event.data ?? {});
       return;
     }
 
@@ -33,6 +36,13 @@ export function SurfaceDetailView({ surface }: { surface: StoredSurface }) {
         removeSurface(surface.id);
       });
       router.replace(`/${surface.lane}`);
+      return;
+    }
+
+    if (event.data?.surface) {
+      startTransition(() => {
+        upsertSurface(event.data!.surface!);
+      });
       return;
     }
 

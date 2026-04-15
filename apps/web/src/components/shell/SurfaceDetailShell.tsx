@@ -10,6 +10,7 @@ import {
 import { SurfaceRenderer } from "@/components/surfaces/SurfaceRenderer";
 import { ActionBar } from "@/components/shell/ActionBar";
 import { StatusChip } from "@/components/shell/StatusChip";
+import { getSurfaceActions } from "@/lib/actions/surface-actions";
 import { ArrowLeft, Clock, ExternalLink } from "lucide-react";
 
 export function SurfaceDetailShell({
@@ -20,6 +21,7 @@ export function SurfaceDetailShell({
   embedded?: boolean;
 }) {
   const router = useRouter();
+  const actions = getSurfaceActions(surface);
 
   return (
     <div
@@ -32,7 +34,7 @@ export function SurfaceDetailShell({
           {!embedded && (
             <button
               onClick={() => router.back()}
-              className="mb-4 inline-flex items-center gap-1.5 px-2 py-1 text-[0.75rem] font-medium text-text-secondary transition-colors hover:text-text-primary"
+              className="-ml-2 mb-3 inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-3 py-2 text-[0.8125rem] font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary md:mb-4 md:min-h-0 md:px-2 md:py-1 md:text-[0.75rem]"
               type="button"
             >
               <ArrowLeft size={14} aria-hidden="true" />
@@ -40,7 +42,7 @@ export function SurfaceDetailShell({
             </button>
           )}
 
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-4">
             <div className="min-w-0">
               <h1 className="text-[1.5rem] md:text-[2rem] leading-[1.1] text-text-primary font-[family-name:var(--font-display)]">
                 {surface.title}
@@ -58,9 +60,9 @@ export function SurfaceDetailShell({
             {surface.summary}
           </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[0.625rem] text-text-tertiary font-[family-name:var(--font-mono)] tabular-nums">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[0.6875rem] text-text-tertiary font-[family-name:var(--font-mono)] tabular-nums">
             <span className="inline-flex items-center gap-1">
-              <Clock size={10} aria-hidden="true" />
+              <Clock size={11} aria-hidden="true" />
               {formatRelativeTime(surface.freshness.generatedAt)}
             </span>
             <span className="uppercase tracking-wider">
@@ -91,7 +93,7 @@ export function SurfaceDetailShell({
                     key={`${ref.kind}-${ref.title}-${index}`}
                     className="flex items-baseline gap-2"
                   >
-                    <span className="text-[0.625rem] uppercase tracking-wider text-text-tertiary font-[family-name:var(--font-mono)]">
+                    <span className="text-[0.6875rem] uppercase tracking-wider text-text-tertiary font-[family-name:var(--font-mono)]">
                       {ref.kind}
                     </span>
                     {safeHref ? (
@@ -117,7 +119,7 @@ export function SurfaceDetailShell({
         )}
       </div>
 
-      <ActionBar actions={surface.actions} surfaceId={surface.id} embedded={embedded} />
+      <ActionBar actions={actions} surfaceId={surface.id} embedded={embedded} />
     </div>
   );
 }

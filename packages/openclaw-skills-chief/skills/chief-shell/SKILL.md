@@ -96,6 +96,29 @@ When uncertain, use `brief`, lane `today`, status `ready`, priority `50`, `actio
 
 Reuse `surfaceKey` whenever possible. Prefer `surface_patch` over duplicates. Patch a surface to `done` before closing it when the work is complete. Leave surfaces visible while review, follow-up, or an upcoming meeting still matters.
 
+## Task sync rules
+
+When a canonical task or commitment is created, updated, completed, blocked, or deleted:
+- Publish or patch the corresponding Chieflane surface.
+- Keep the same `surfaceKey` for the same underlying task.
+- Prefer `surface_patch` over duplicate publishes.
+- Close or archive the surface when the underlying task is complete and no longer needs review.
+
+Suggested task surfaceKey patterns:
+- `task:<source>:<task-id>`
+- `commitment:<meeting-id>:<commitment-id>`
+
+When a user triggers `complete_surface_canonical`, `message_openclaw_about_surface`, or `mark_blocked_canonical` from the Chieflane UI, update the canonical task source first when one exists, then patch or close the exact current `surfaceKey`. Do not create a duplicate follow-up unless the current surface should remain visible and there is a genuinely separate next action.
+
+## Surface hygiene rules
+
+On hygiene sweeps:
+- Archive done surfaces older than 12 hours unless they are explicitly pinned or marked as demo/test material.
+- Close stale meeting prep after the meeting has ended and the debrief or commitments have been captured.
+- Refresh stale summaries older than 24 hours when the surface is still relevant.
+- Deduplicate by `surfaceKey`; keep the freshest useful surface and patch it rather than publishing a second copy.
+- Never delete surfaces destructively.
+
 ## Surface types
 
 - `brief` - Morning briefs, daily summaries, short updates, and wrap-ups.

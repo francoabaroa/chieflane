@@ -33,7 +33,7 @@ export function SurfaceList({
       {surfaces.map((surface, i) => (
         <div
           key={surface.id}
-          className="stagger-item"
+          className="surface-list-item stagger-item"
           style={{ "--stagger-index": Math.min(i, 8) } as React.CSSProperties}
         >
           <SurfaceCard

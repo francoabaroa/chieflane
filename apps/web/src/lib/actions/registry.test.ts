@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { surfaceEnvelopeSchema } from "@chieflane/surface-schema";
+import type { StreamEvent } from "@/lib/types";
 import { subscribe } from "@/lib/realtime";
 import { resetDb } from "@/lib/db";
 import { getSurfaceById, upsertSurfaceByKey } from "@/lib/db/surfaces";
@@ -52,10 +53,10 @@ test("set_status done closes the surface and emits surface.closed", async () => 
     throw new Error("set_status definition missing");
   }
 
-  let eventType: string | null = null;
+  const emittedEvents: StreamEvent[] = [];
   const unsubscribe = subscribe((event) => {
     if (event.surfaceId === surface.id) {
-      eventType = event.type;
+      emittedEvents.push(event);
     }
   });
 
@@ -68,6 +69,10 @@ test("set_status done closes the surface and emits surface.closed", async () => 
     unsubscribe();
   }
 
-  assert.equal(eventType, "surface.closed");
+  const emittedEvent = emittedEvents[0];
+  assert.ok(emittedEvent);
+  assert.equal(emittedEvent.type, "surface.closed");
+  assert.equal(emittedEvent.data?.surface?.status, "done");
+  assert.equal(emittedEvent.data?.surface?.id, surface.id);
   assert.equal(getSurfaceById(surface.id)?.status, "done");
 });

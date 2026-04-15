@@ -10,10 +10,11 @@ export default function InboxPage() {
   return (
     <div>
       <LaneHeader
+        lane="inbox"
         icon="Inbox"
         title="Inbox"
         description="Triage and approvals"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="inbox" initialSurfaces={surfaces} emptyMessage="Inbox zero — nothing to triage" />
     </div>

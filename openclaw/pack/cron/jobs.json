@@ -22,6 +22,20 @@
       "message": "Execute Weekly Exec Agenda per AGENTS.md and publish/update the weekly agenda surface."
     },
     {
+      "name": "task-sync",
+      "cron": "*/10 * * * *",
+      "timezone": "America/New_York",
+      "timeoutSeconds": 300,
+      "message": "Execute Task Sync per AGENTS.md. Reflect the canonical task source into Chieflane by publishing, patching, or closing surfaces. Keep surfaceKey stable for the same task."
+    },
+    {
+      "name": "surface-maintenance",
+      "cron": "17 * * * *",
+      "timezone": "America/New_York",
+      "timeoutSeconds": 300,
+      "message": "Execute Surface Hygiene per AGENTS.md. Archive done surfaces older than 12 hours, close stale meeting prep after the meeting ends, refresh stale summaries older than 24 hours, and deduplicate by surfaceKey."
+    },
+    {
       "name": "kaizen-review",
       "cron": "0 9 * * 0",
       "timezone": "America/New_York",

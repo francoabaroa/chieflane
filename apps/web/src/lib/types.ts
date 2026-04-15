@@ -1,4 +1,4 @@
-import type { Lane } from "@chieflane/surface-schema";
+import type { Lane, Status, StoredSurface } from "@chieflane/surface-schema";
 
 export interface LaneConfig {
   id: Lane;
@@ -56,5 +56,13 @@ export interface StreamEvent {
   type: "surface.updated" | "surface.closed" | "action.progress";
   surfaceId: string;
   version?: number;
-  data?: Record<string, unknown>;
+  data?: {
+    lane?: Lane;
+    status?: Status;
+    surface?: StoredSurface;
+    actionKey?: string;
+    actionRunId?: string;
+    event?: string;
+    text?: string;
+  };
 }

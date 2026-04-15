@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       data: {
         lane: surface.lane,
         status: surface.status,
+        surface,
       },
     });
     try {

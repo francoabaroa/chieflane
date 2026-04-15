@@ -4,6 +4,8 @@ import { startTransition, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Lane, StoredSurface } from "@chieflane/surface-schema";
 import { useSurfaceStore } from "@/lib/client/surface-store";
+import { useActionProgressStore } from "@/lib/client/action-progress-store";
+import { isVisibleLaneSurface } from "@/lib/surfaces/visibility";
 import { useStream } from "@/hooks/useStream";
 import { SurfaceList } from "./SurfaceList";
 import { SurfaceDetailShell } from "./SurfaceDetailShell";
@@ -21,6 +23,9 @@ export function LaneSurfaceView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const replaceLane = useSurfaceStore((state) => state.replaceLane);
+  const upsertSurface = useSurfaceStore((state) => state.upsertSurface);
+  const removeSurface = useSurfaceStore((state) => state.removeSurface);
+  const setActionProgress = useActionProgressStore((state) => state.setProgress);
   const surfaceIds = useSurfaceStore((state) => state.laneSurfaceIds[lane] ?? []);
   const surfacesById = useSurfaceStore((state) => state.surfacesById);
   const surfaces = surfaceIds
@@ -31,26 +36,62 @@ export function LaneSurfaceView({
     replaceLane(lane, initialSurfaces);
   }, [initialSurfaces, lane, replaceLane]);
 
-  const refreshLane = async () => {
-    const response = await fetch(`/api/surfaces?lane=${lane}`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return;
-    }
-
-    const nextSurfaces = (await response.json()) as StoredSurface[];
-    startTransition(() => {
-      replaceLane(lane, nextSurfaces);
-    });
-  };
-
   useStream((event) => {
     if (event.type === "action.progress") {
+      setActionProgress(event.surfaceId, event.data ?? {});
       return;
     }
-    void refreshLane();
+
+    if (event.type === "surface.closed") {
+      startTransition(() => {
+        removeSurface(event.surfaceId);
+      });
+      return;
+    }
+
+    if (event.type === "surface.updated" && event.data?.surface) {
+      const surface = event.data.surface;
+      startTransition(() => {
+        if (isVisibleLaneSurface(surface, lane)) {
+          upsertSurface(surface);
+        } else {
+          removeSurface(surface.id);
+        }
+      });
+      return;
+    }
+
+    const eventLane = event.data?.lane;
+    const eventStatus = event.data?.status;
+    if (
+      (eventLane && eventLane !== lane) ||
+      eventStatus === "done" ||
+      eventStatus === "archived"
+    ) {
+      startTransition(() => {
+        removeSurface(event.surfaceId);
+      });
+      return;
+    }
+
+    void (async () => {
+      const response = await fetch(`/api/surfaces?id=${event.surfaceId}`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const surface = (await response.json()) as StoredSurface;
+      startTransition(() => {
+        if (isVisibleLaneSurface(surface, lane)) {
+          upsertSurface(surface);
+        } else {
+          removeSurface(surface.id);
+        }
+      });
+    })();
   });
 
   const selectedSurfaceId =
@@ -71,8 +112,8 @@ export function LaneSurfaceView({
       {surfaces.length === 0 ? (
         <SurfaceList surfaces={surfaces} emptyMessage={emptyMessage} lane={lane} />
       ) : (
-        <div className="md:grid md:grid-cols-[360px_1fr]">
-          <div className="md:overflow-y-auto md:max-h-[calc(100dvh-73px)] md:border-r md:border-border">
+        <div className="md:grid md:grid-cols-[360px_1fr] md:h-[calc(100dvh-var(--lane-header-h,73px))]">
+          <div className="md:overflow-y-auto md:border-r md:border-border">
             <SurfaceList
               surfaces={surfaces}
               emptyMessage={emptyMessage}
@@ -83,7 +124,7 @@ export function LaneSurfaceView({
             />
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden md:block md:overflow-y-auto">
             {selectedSurface ? (
               <SurfaceDetailShell surface={selectedSurface} embedded />
             ) : (

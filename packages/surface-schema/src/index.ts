@@ -37,6 +37,16 @@ export const surfaceTypeSchema = z.enum([
 ]);
 export type SurfaceType = z.infer<typeof surfaceTypeSchema>;
 
+export const actionInputSpecSchema = z.object({
+  mode: z.enum(["text", "textarea"]).default("textarea"),
+  label: z.string(),
+  placeholder: z.string().optional(),
+  submitLabel: z.string().optional(),
+  required: z.boolean().default(false),
+  maxLength: z.number().int().positive().optional(),
+});
+export type ActionInputSpec = z.infer<typeof actionInputSpecSchema>;
+
 export const actionSchema = z.discriminatedUnion("kind", [
   z.object({
     id: z.string(),
@@ -54,6 +64,7 @@ export const actionSchema = z.discriminatedUnion("kind", [
     label: z.string(),
     mutation: z.enum(["archive", "dismiss", "set_status"]),
     input: z.record(z.string(), z.unknown()).optional().default({}),
+    inputSpec: actionInputSpecSchema.optional(),
     confirmText: z.string().optional(),
     style: z
       .enum(["primary", "secondary", "ghost", "danger"])
@@ -65,6 +76,7 @@ export const actionSchema = z.discriminatedUnion("kind", [
     label: z.string(),
     actionKey: z.string(),
     input: z.record(z.string(), z.unknown()).optional().default({}),
+    inputSpec: actionInputSpecSchema.optional(),
     confirmText: z.string().optional(),
     style: z
       .enum(["primary", "secondary", "ghost", "danger"])

@@ -10,10 +10,11 @@ export default function DraftsPage() {
   return (
     <div>
       <LaneHeader
+        lane="drafts"
         icon="PenLine"
         title="Drafts"
         description="Messages and communications"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="drafts" initialSurfaces={surfaces} emptyMessage="No drafts pending review" />
     </div>

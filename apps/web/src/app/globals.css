@@ -16,9 +16,9 @@
   --color-border: var(--cl-border);
   --color-border-subtle: var(--cl-border-subtle);
 
-  /* ── Accent — warm vermillion ── */
-  --color-accent: oklch(0.62 0.19 28);
-  --color-accent-hover: oklch(0.68 0.21 28);
+  /* ── Accent — deep amber/ochre ── */
+  --color-accent: oklch(0.55 0.14 65);
+  --color-accent-hover: oklch(0.62 0.16 65);
   --color-accent-muted: var(--cl-accent-muted);
 
   /* ── Text ── */
@@ -51,7 +51,7 @@ html, html.light {
   --cl-elevated: oklch(0.99 0.003 70);
   --cl-border: oklch(0.875 0.008 70);
   --cl-border-subtle: oklch(0.92 0.005 70);
-  --cl-accent-muted: oklch(0.62 0.19 28 / 0.08);
+  --cl-accent-muted: oklch(0.55 0.14 65 / 0.08);
   --cl-text-primary: oklch(0.20 0.015 260);
   --cl-text-secondary: oklch(0.45 0.02 260);
   --cl-text-tertiary: oklch(0.58 0.015 260);
@@ -70,7 +70,7 @@ html.dark {
   --cl-elevated: oklch(0.24 0.010 260);
   --cl-border: oklch(0.30 0.010 260);
   --cl-border-subtle: oklch(0.22 0.008 260);
-  --cl-accent-muted: oklch(0.62 0.19 28 / 0.12);
+  --cl-accent-muted: oklch(0.55 0.14 65 / 0.12);
   --cl-text-primary: oklch(0.93 0.008 70);
   --cl-text-secondary: oklch(0.65 0.015 260);
   --cl-text-tertiary: oklch(0.52 0.012 260);
@@ -89,7 +89,7 @@ html.dark {
     --cl-elevated: oklch(0.24 0.010 260);
     --cl-border: oklch(0.30 0.010 260);
     --cl-border-subtle: oklch(0.22 0.008 260);
-    --cl-accent-muted: oklch(0.62 0.19 28 / 0.12);
+    --cl-accent-muted: oklch(0.55 0.14 65 / 0.12);
     --cl-text-primary: oklch(0.93 0.008 70);
     --cl-text-secondary: oklch(0.65 0.015 260);
     --cl-text-tertiary: oklch(0.52 0.012 260);
@@ -118,7 +118,6 @@ html.dark {
 
   body {
     min-height: 100dvh;
-    overscroll-behavior: none;
   }
 
   a,
@@ -173,6 +172,17 @@ html.dark {
   .stagger-item {
     animation: slide-up 400ms var(--ease-out-expo) both;
     animation-delay: calc(var(--stagger-index, 0) * 60ms);
+  }
+
+  .surface-list-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 140px;
+  }
+
+  @media (max-width: 767px) {
+    .stagger-item {
+      animation: none;
+    }
   }
 }
 

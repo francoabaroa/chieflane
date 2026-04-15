@@ -10,10 +10,11 @@ export default function MeetingsPage() {
   return (
     <div>
       <LaneHeader
+        lane="meetings"
         icon="Calendar"
         title="Meetings"
         description="Prep, debrief, follow-ups"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="meetings" initialSurfaces={surfaces} emptyMessage="No meeting surfaces — schedule is clear" />
     </div>

@@ -54,3 +54,14 @@ Approval gate: never invent facts.
 Authority: identify repeated friction, propose improvements, and surface changes.
 Trigger: weekly cron.
 Approval gate: apply only with approval.
+
+### Program: Task Sync
+Authority: reflect canonical task and commitment changes into Chieflane surfaces.
+Trigger: after task mutations, after meeting debriefs, and on recurring cron sweeps.
+Approval gate: creating, patching, or closing Chieflane surfaces is allowed; external sends still require the usual rules.
+Escalation: if the canonical task source is ambiguous, preserve the current surface and ask for clarification rather than creating duplicates.
+
+### Program: Surface Hygiene
+Authority: archive completed surfaces, close stale prep surfaces, refresh stale summaries, and deduplicate by surfaceKey.
+Trigger: hourly cron and explicit repair requests.
+Approval gate: closing stale done/archive-safe surfaces is allowed; destructive deletion is never allowed.

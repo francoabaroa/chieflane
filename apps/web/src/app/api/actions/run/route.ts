@@ -3,7 +3,9 @@ import { getSurfaceById, createActionRun, updateActionRun } from "@/lib/db/surfa
 import { getActionDefinition } from "@/lib/actions/registry";
 import { getActionKey } from "@/lib/actions/key";
 import { resolveActionExecutionInput } from "@/lib/actions/input";
+import { getSurfaceActions } from "@/lib/actions/surface-actions";
 import { runAgentAction } from "@/lib/openclaw/client";
+import { fanoutEvent } from "@/lib/realtime";
 import { z } from "zod";
 
 const actionRunRequestSchema = z.object({
@@ -43,7 +45,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const currentAction = surface.actions.find((action) => action.id === actionId);
+  const currentAction = getSurfaceActions(surface).find(
+    (action) => action.id === actionId
+  );
   if (!currentAction) {
     return NextResponse.json(
       { ok: false, error: "Action is no longer available on this surface" },
@@ -78,6 +82,15 @@ export async function POST(req: NextRequest) {
 
   try {
     updateActionRun({ id: actionRunId, status: "running" });
+    fanoutEvent({
+      type: "action.progress",
+      surfaceId: surface.id,
+      data: {
+        actionKey: currentActionKey,
+        actionRunId,
+        event: "running",
+      },
+    });
 
     const result =
       definition.kind === "shell"
@@ -95,6 +108,16 @@ export async function POST(req: NextRequest) {
       status: "completed",
       output: result.output ?? null,
     });
+    fanoutEvent({
+      type: "action.progress",
+      surfaceId: surface.id,
+      data: {
+        actionKey: currentActionKey,
+        actionRunId,
+        event: "completed",
+        text: result.message,
+      },
+    });
 
     return NextResponse.json({
       actionRunId,
@@ -107,6 +130,16 @@ export async function POST(req: NextRequest) {
       id: actionRunId,
       status: "failed",
       errorText: message,
+    });
+    fanoutEvent({
+      type: "action.progress",
+      surfaceId: surface.id,
+      data: {
+        actionKey: currentActionKey,
+        actionRunId,
+        event: "failed",
+        text: message,
+      },
     });
 
     return NextResponse.json(

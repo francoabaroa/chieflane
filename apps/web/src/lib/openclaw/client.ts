@@ -185,6 +185,8 @@ export async function runAgentAction(opts: {
 
   await consumeSseStream(response, (eventName, payload) => {
     const delta = extractText(payload);
+    const payloadType =
+      typeof payload.type === "string" ? payload.type : "message";
     if (delta) {
       transcript += delta;
     }
@@ -195,7 +197,7 @@ export async function runAgentAction(opts: {
       data: {
         actionKey: opts.actionKey,
         actionRunId: opts.actionRunId,
-        event: eventName ?? payload.type ?? "message",
+        event: eventName ?? payloadType,
         text: delta || undefined,
       },
     });

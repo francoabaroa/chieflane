@@ -10,10 +10,11 @@ export default function OpsPage() {
   return (
     <div>
       <LaneHeader
+        lane="ops"
         icon="Activity"
         title="Ops"
         description="System health and automations"
-        count={surfaces.length}
+        initialCount={surfaces.length}
       />
       <LaneSurfaceView lane="ops" initialSurfaces={surfaces} emptyMessage="All systems nominal" />
     </div>

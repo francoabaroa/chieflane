@@ -6,7 +6,10 @@ import type { StreamEvent } from "@/lib/types";
 export function useStream(onEvent: (event: StreamEvent) => void) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
